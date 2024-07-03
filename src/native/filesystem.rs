@@ -75,7 +75,9 @@ mod tests {
     async fn write_text_to_file_persists() {
         let path = make_tmp_path();
         drop(File::create_new(&path).await.unwrap());
-        IMPL.write_text_to_file(path.as_ref(), &"content".to_string()).await.expect("Failed call");
+        IMPL.write_text_to_file(path.as_ref(), &"content".to_string())
+            .await
+            .expect("Failed call");
         let actual_content = read_to_string(&path).await.expect("Failed to read");
         assert_eq!(actual_content, "content");
         remove_file(&path).await.unwrap();
@@ -86,7 +88,9 @@ mod tests {
         let content = "content".as_bytes();
         let path = make_tmp_path();
         drop(File::create_new(&path).await.unwrap());
-        IMPL.write_bytes_to_file(path.as_ref(), &content).await.expect("Failed call");
+        IMPL.write_bytes_to_file(path.as_ref(), &content)
+            .await
+            .expect("Failed call");
         let actual_content = read_to_string(&path).await.expect("Failed to read");
         assert_eq!(actual_content.as_bytes(), content);
         remove_file(&path).await.unwrap();

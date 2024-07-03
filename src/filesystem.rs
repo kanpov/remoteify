@@ -5,7 +5,15 @@ pub trait LinuxFilesystem {
 
     fn create_file(&self, path: &Path) -> impl Future<Output = io::Result<()>>;
 
-    fn write_text_to_file(&self, path: &Path, text: &String) -> impl Future<Output = io::Result<()>>;
+    fn write_text_to_file(
+        &self,
+        path: &Path,
+        text: &String,
+    ) -> impl Future<Output = io::Result<()>>;
 
-    fn write_bytes_to_file(&self, path: &Path, bytes: &[u8]) -> impl Future<Output = io::Result<()>>;
+    fn write_bytes_to_file(
+        &self,
+        path: &Path,
+        bytes: &[u8],
+    ) -> impl Future<Output = io::Result<()>>;
 }
