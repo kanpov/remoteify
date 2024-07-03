@@ -1,4 +1,5 @@
 pub mod filesystem;
+mod native;
 
 #[cfg(feature = "native")]
-pub mod native;
+pub use native::NativeLinux;
