@@ -1,0 +1,16 @@
+[package]
+name = "lhf"
+version = "0.1.0"
+edition = "2021"
+description = "LHF (Linux Host Framework) is a set of contracts that allow using libraries that depend on Linux on other environments"
+
+[dependencies]
+tokio = { version = "1.38.0", features = ["rt", "macros", "fs"] }
+
+[dev-dependencies]
+uuid = { version = "1.9.1", features = ["v4"] }
+
+[features]
+default = ["native"]
+native = []
+ssh = []
