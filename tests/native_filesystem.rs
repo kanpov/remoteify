@@ -1,9 +1,9 @@
-use std::io::SeekFrom;
+use std::{fs::Permissions, io::SeekFrom, os::unix::fs::PermissionsExt, path::Path};
 
 use common::get_tmp_path;
 use lhf::{filesystem::LinuxFilesystem, NativeLinux};
 use tokio::{
-    fs::{create_dir, read_to_string, remove_dir, remove_file, write, File},
+    fs::{create_dir, metadata, read_to_string, remove_dir, remove_file, symlink, symlink_metadata, try_exists, write, File},
     io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
 };
 mod common;
@@ -123,5 +123,86 @@ async fn file_open_read_append() {
     read_writer.seek(SeekFrom::Start(0)).await.unwrap();
     read_writer.read_to_string(&mut buf).await.unwrap();
     assert_eq!(buf, "contentnext");
+    remove_file(&path).await.unwrap();
+}
+
+#[tokio::test]
+async fn create_file_should_persist() {
+    let path = get_tmp_path();
+    IMPL.create_file(&path).await.expect("Call failed");
+    assert!(try_exists(&path).await.unwrap());
+    remove_file(&path).await.unwrap();
+}
+
+#[tokio::test]
+async fn rename_file_should_persist() {
+    let old_path = get_tmp_path();
+    let new_path = get_tmp_path();
+    File::create_new(&old_path).await.unwrap();
+    IMPL.rename_file(&old_path, &new_path).await.expect("Call failed");
+    assert!(!try_exists(&old_path).await.unwrap());
+    assert!(try_exists(&new_path).await.unwrap());
+    remove_file(&new_path).await.unwrap();
+}
+
+#[tokio::test]
+async fn copy_file_should_persist() {
+    let old_path = get_tmp_path();
+    let new_path = get_tmp_path();
+    write(&old_path, "content").await.unwrap();
+    IMPL.copy_file(&old_path, &new_path).await.expect("Call failed");
+    assert_eq!(read_to_string(&new_path).await.unwrap(), "content");
+    remove_file(&old_path).await.unwrap();
+    remove_file(&new_path).await.unwrap();
+}
+
+#[tokio::test]
+async fn canonicalize_should_perform_operation() {
+    let canonicalized_path = IMPL.canonicalize(Path::new("/tmp/../tmp/../tmp")).await.expect("Call failed");
+    assert_eq!(canonicalized_path.to_str().unwrap(), "/tmp");
+}
+
+#[tokio::test]
+async fn symlink_should_establish_link() {
+    let src_path = get_tmp_path();
+    let dst_path = get_tmp_path();
+    write(&src_path, "").await.unwrap();
+    IMPL.symlink(&src_path, &dst_path).await.expect("Call failed");
+    assert!(try_exists(&dst_path).await.unwrap());
+    assert!(symlink_metadata(&dst_path).await.is_ok());
+    remove_file(&src_path).await.unwrap();
+    remove_file(&dst_path).await.unwrap();
+}
+
+#[tokio::test]
+async fn hard_link_should_establish_link() {
+    let src_path = get_tmp_path();
+    let dst_path = get_tmp_path();
+    write(&src_path, "content").await.unwrap();
+    IMPL.hardlink(&src_path, &dst_path).await.expect("Call failed");
+    assert!(try_exists(&dst_path).await.unwrap());
+    assert_eq!(read_to_string(&dst_path).await.unwrap(), "content");
+    remove_file(&src_path).await.unwrap();
+    remove_file(&dst_path).await.unwrap();
+}
+
+#[tokio::test]
+async fn read_link_should_return_correct_location() {
+    let src_path = get_tmp_path();
+    let dst_path = get_tmp_path();
+    write(&src_path, "").await.unwrap();
+    symlink(&src_path, &dst_path).await.unwrap();
+    assert_eq!(src_path, IMPL.read_link(&dst_path).await.unwrap());
+    remove_file(&src_path).await.unwrap();
+    remove_file(&dst_path).await.unwrap();
+}
+
+#[tokio::test]
+async fn set_permissions_should_perform_update() {
+    let path = get_tmp_path();
+    write(&path, "content").await.unwrap();
+    IMPL.set_permissions(&path, Permissions::from_mode(777)).await.unwrap();
+    let meta = metadata(&path).await.unwrap();
+    assert_eq!(meta.permissions().mode(), 33545);
     remove_file(&path).await.unwrap();
 }
