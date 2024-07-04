@@ -2,8 +2,8 @@ use std::path::Path;
 
 use async_trait::async_trait;
 use russh::client;
-use russh_sftp::protocol::OpenFlags;
-use tokio::io::{self, AsyncWriteExt};
+use russh_sftp::{client::fs::File, protocol::OpenFlags};
+use tokio::io::{self};
 
 use crate::filesystem::LinuxFilesystem;
 
@@ -23,6 +23,39 @@ where
         )
     }
 
+    async fn get_file_writer(&self, path: &Path) -> io::Result<File> {
+        match self
+            .sftp_session
+            .open_with_flags(path_to_str(path), OpenFlags::WRITE)
+            .await
+        {
+            Ok(file) => return Ok(file),
+            Err(err) => return Err(io::Error::other(err)),
+        }
+    }
+
+    async fn get_file_writer_for_append(&self, path: &Path) -> io::Result<File> {
+        match self
+            .sftp_session
+            .open_with_flags(path_to_str(path), OpenFlags::union(OpenFlags::WRITE, OpenFlags::APPEND))
+            .await
+        {
+            Ok(file) => return Ok(file),
+            Err(err) => return Err(io::Error::other(err)),
+        }
+    }
+
+    async fn get_file_reader(&self, path: &Path) -> io::Result<File> {
+        match self
+            .sftp_session
+            .open_with_flags(path_to_str(path), OpenFlags::READ)
+            .await
+        {
+            Ok(file) => return Ok(file),
+            Err(err) => return Err(io::Error::other(err)),
+        }
+    }
+
     async fn create_file(&self, path: &Path) -> io::Result<()> {
         let file = match self.sftp_session.as_ref().create(path_to_str(path)).await {
             Ok(file) => file,
@@ -30,41 +63,6 @@ where
         };
         drop(file);
         Ok(())
-    }
-
-    async fn write_text_to_file(&self, path: &Path, text: &String) -> io::Result<()> {
-        self.write_bytes_to_file(path, text.as_bytes()).await
-    }
-
-    async fn write_bytes_to_file(&self, path: &Path, bytes: &[u8]) -> io::Result<()> {
-        let mut file = match self
-            .sftp_session
-            .open_with_flags(path_to_str(path), OpenFlags::WRITE)
-            .await
-        {
-            Ok(file) => file,
-            Err(err) => return Err(io::Error::other(err)),
-        };
-        file.write_all(bytes).await
-    }
-
-    async fn append_text_to_file(&self, path: &Path, text: &String) -> io::Result<()> {
-        self.append_bytes_to_file(path, text.as_bytes()).await
-    }
-
-    async fn append_bytes_to_file(&self, path: &Path, bytes: &[u8]) -> io::Result<()> {
-        let mut file = match self
-            .sftp_session
-            .open_with_flags(
-                path_to_str(path),
-                OpenFlags::union(OpenFlags::WRITE, OpenFlags::APPEND),
-            )
-            .await
-        {
-            Ok(file) => file,
-            Err(err) => return Err(io::Error::other(err)),
-        };
-        file.write_all(bytes).await
     }
 }
 
