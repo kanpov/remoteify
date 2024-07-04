@@ -7,7 +7,10 @@ use crate::filesystem::LinuxFilesystem;
 
 use super::SshLinux;
 
-impl<T> LinuxFilesystem for SshLinux<T> where T : client::Handler {
+impl<T> LinuxFilesystem for SshLinux<T>
+where
+    T: client::Handler,
+{
     async fn exists(&self, path: &Path) -> io::Result<bool> {
         todo!()
     }
