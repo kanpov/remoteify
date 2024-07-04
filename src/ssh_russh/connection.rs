@@ -6,10 +6,10 @@ use russh_keys::key::{KeyPair, PublicKey};
 use russh_sftp::client::SftpSession;
 use tokio::sync::Mutex;
 
-use crate::SshLinux;
+use crate::ssh_russh::RusshLinux;
 
 #[derive(Debug)]
-pub enum SshConnectionError<T>
+pub enum RusshConnectionError<T>
 where
     T: client::Handler,
     T: 'static,
@@ -21,28 +21,28 @@ where
     SftpOpenError(russh_sftp::client::error::Error),
 }
 
-pub struct SshConnectionOptions {
+pub struct RusshConnectionOptions {
     pub host: String,
     pub port: u16,
     pub username: String,
     pub config: client::Config,
-    pub authentication: SshAuthentication,
+    pub authentication: RusshAuthentication,
 }
 
-pub enum SshAuthentication {
+pub enum RusshAuthentication {
     Password { password: String },
     PublicKey { key_pair: KeyPair },
     None,
 }
 
-impl<T> SshLinux<T>
+impl<T> RusshLinux<T>
 where
     T: client::Handler,
 {
     pub async fn connect(
         handler: T,
-        connection_options: SshConnectionOptions,
-    ) -> Result<SshLinux<T>, SshConnectionError<T>> {
+        connection_options: RusshConnectionOptions,
+    ) -> Result<RusshLinux<T>, RusshConnectionError<T>> {
         let mut handle = match client::connect(
             Arc::new(connection_options.config),
             (connection_options.host, connection_options.port),
@@ -51,11 +51,11 @@ where
         .await
         {
             Ok(handle) => handle,
-            Err(err) => return Err(SshConnectionError::ConnectionError(err)),
+            Err(err) => return Err(RusshConnectionError::ConnectionError(err)),
         };
 
         match connection_options.authentication {
-            SshAuthentication::Password { password } => {
+            RusshAuthentication::Password { password } => {
                 let error = map_to_error(
                     handle
                         .authenticate_password(connection_options.username, password)
@@ -65,7 +65,7 @@ where
                     return Err(error.unwrap());
                 }
             }
-            SshAuthentication::PublicKey { key_pair } => {
+            RusshAuthentication::PublicKey { key_pair } => {
                 let error = map_to_error(
                     handle
                         .authenticate_publickey(connection_options.username, Arc::new(key_pair))
@@ -75,7 +75,7 @@ where
                     return Err(error.unwrap());
                 }
             }
-            SshAuthentication::None => {
+            RusshAuthentication::None => {
                 let error =
                     map_to_error(handle.authenticate_none(connection_options.username).await);
                 if error.is_some() {
@@ -86,25 +86,25 @@ where
 
         let sftp_channel = match handle.channel_open_session().await {
             Ok(channel) => channel,
-            Err(err) => return Err(SshConnectionError::ChannelOpenError(err)),
+            Err(err) => return Err(RusshConnectionError::ChannelOpenError(err)),
         };
 
         match sftp_channel.request_subsystem(true, "sftp").await {
             Ok(_) => {}
-            Err(err) => return Err(SshConnectionError::SftpRequestError(err)),
+            Err(err) => return Err(RusshConnectionError::SftpRequestError(err)),
         }
 
         let sftp_session = match SftpSession::new(sftp_channel.into_stream()).await {
             Ok(session) => session,
-            Err(err) => return Err(SshConnectionError::SftpOpenError(err)),
+            Err(err) => return Err(RusshConnectionError::SftpOpenError(err)),
         };
 
         let ssh_channel = match handle.channel_open_session().await {
             Ok(channel) => channel,
-            Err(err) => return Err(SshConnectionError::ChannelOpenError(err)),
+            Err(err) => return Err(RusshConnectionError::ChannelOpenError(err)),
         };
 
-        Ok(SshLinux {
+        Ok(RusshLinux {
             handle: Arc::new(handle),
             ssh_channel: Arc::new(Mutex::new(ssh_channel)),
             sftp_session: Arc::new(sftp_session),
@@ -112,12 +112,12 @@ where
     }
 }
 
-fn map_to_error<T>(result: Result<bool, russh::Error>) -> Option<SshConnectionError<T>>
+fn map_to_error<T>(result: Result<bool, russh::Error>) -> Option<RusshConnectionError<T>>
 where
     T: client::Handler,
 {
     if result.is_err() {
-        return Some(SshConnectionError::AuthenticationError(result.unwrap_err()));
+        return Some(RusshConnectionError::AuthenticationError(result.unwrap_err()));
     }
     None
 }

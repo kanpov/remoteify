@@ -6,7 +6,7 @@ use std::sync::Arc;
 use russh::client::{self, Msg};
 use tokio::sync::Mutex;
 
-pub struct SshLinux<T>
+pub struct RusshLinux<T>
 where
     T: client::Handler,
     T: 'static,
@@ -24,22 +24,22 @@ mod tests {
 
     use crate::{
         filesystem::LinuxFilesystem,
-        ssh::connection::{SshAuthentication, SshConnectionOptions, TrustingHandler},
-        SshLinux,
+        ssh_russh::connection::{RusshAuthentication, RusshConnectionOptions, TrustingHandler},
+        ssh_russh::RusshLinux,
     };
 
     #[tokio::test]
     async fn tmp_test() {
-        let conn_opt = SshConnectionOptions {
+        let conn_opt = RusshConnectionOptions {
             host: "localhost".into(),
             port: 9000,
             config: client::Config::default(),
             username: "root".into(),
-            authentication: SshAuthentication::Password {
+            authentication: RusshAuthentication::Password {
                 password: "root123".into(),
             },
         };
-        let ssh_linux = SshLinux::connect(TrustingHandler {}, conn_opt)
+        let ssh_linux = RusshLinux::connect(TrustingHandler {}, conn_opt)
             .await
             .unwrap();
 

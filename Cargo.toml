@@ -5,16 +5,19 @@ edition = "2021"
 description = "LHF (Linux Host Framework) is a set of contracts that allow using libraries that depend on Linux on other environments"
 
 [dependencies]
-tokio = { version = "1.38.0", features = ["rt", "macros", "fs"] }
-russh = "0.43.0"
-russh-keys = "0.43.0"
-russh-sftp = "2.0.1"
+# api
+tokio = { version = "1.38.0", features = ["fs", "io-util"] }
 async-trait = "0.1.80"
+# russh impl
+russh = { version = "0.43.0", optional = true }
+russh-keys = { version = "0.43.0", optional = true }
+russh-sftp = { version = "2.0.1", optional = true }
 
 [dev-dependencies]
 uuid = { version = "1.9.1", features = ["v4"] }
+tokio = { version = "1.38.0", features = ["macros"] }
 
 [features]
-default = ["native", "ssh"]
+default = ["native", "ssh_russh"]
 native = []
-ssh = []
+ssh_russh = ["dep:russh", "dep:russh-keys", "dep:russh-sftp"]

@@ -18,10 +18,10 @@ use std::io::{self};
 
 use crate::filesystem::LinuxFilesystem;
 
-use super::SshLinux;
+use super::RusshLinux;
 
 #[async_trait]
-impl<T> LinuxFilesystem for SshLinux<T>
+impl<T> LinuxFilesystem for RusshLinux<T>
 where
     T: client::Handler,
 {
@@ -167,13 +167,13 @@ async fn internal_open_file(
 }
 
 async fn internal_run_fs_command<T>(
-    ssh_linux: &SshLinux<T>,
+    instance: &RusshLinux<T>,
     command: String,
 ) -> io::Result<Option<u32>>
 where
     T: client::Handler,
 {
-    let mut chan = ssh_linux.ssh_channel.lock().await;
+    let mut chan = instance.ssh_channel.lock().await;
     let exec_result = chan.exec(true, command).await;
     if exec_result.is_err() {
         return Err(io::Error::other(exec_result.unwrap_err()));
