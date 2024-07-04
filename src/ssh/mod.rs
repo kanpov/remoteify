@@ -1,10 +1,10 @@
-mod connection;
+pub mod connection;
 mod filesystem;
 
 use std::sync::Arc;
 
-pub use connection::*;
 use russh::client::{self, Msg};
+use tokio::sync::Mutex;
 
 pub struct SshLinux<T>
 where
@@ -12,7 +12,7 @@ where
     T: 'static,
 {
     handle: Arc<client::Handle<T>>,
-    ssh_channel: Arc<russh::Channel<Msg>>,
+    ssh_channel: Arc<Mutex<russh::Channel<Msg>>>,
     sftp_session: Arc<russh_sftp::client::SftpSession>,
 }
 
@@ -21,11 +21,11 @@ mod tests {
     use std::path::Path;
 
     use russh::client;
-    use tokio::io::AsyncReadExt;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     use crate::{
         filesystem::LinuxFilesystem,
-        ssh::{SshAuthentication, SshConnectionOptions, TrustingHandler},
+        ssh::connection::{SshAuthentication, SshConnectionOptions, TrustingHandler},
         SshLinux,
     };
 
@@ -43,11 +43,15 @@ mod tests {
         let ssh_linux = SshLinux::connect(TrustingHandler {}, conn_opt)
             .await
             .unwrap();
-        let mut reader = ssh_linux.get_file_reader(Path::new("/tmp/a.txt")).await.unwrap();
+        let mut reader_writer = ssh_linux
+            .file_open_read_write(Path::new("/tmp/a.txt"), false)
+            .await
+            .unwrap();
         let mut buf = String::new();
-        reader.read_to_string(&mut buf).await.unwrap();
+        reader_writer.read_to_string(&mut buf).await.unwrap();
+        drop(reader_writer);
         dbg!(buf);
-        drop(reader);
-        dbg!(true);
+
+        ssh_linux.copy(Path::new("/tmp/c.txt"), Path::new("/tmp/d.txt")).await.unwrap();
     }
 }

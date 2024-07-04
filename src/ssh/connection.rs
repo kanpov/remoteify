@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use russh::client::{self};
 use russh_keys::key::{KeyPair, PublicKey};
 use russh_sftp::client::SftpSession;
+use tokio::sync::Mutex;
 
 use crate::SshLinux;
 
@@ -105,7 +106,7 @@ where
 
         Ok(SshLinux {
             handle: Arc::new(handle),
-            ssh_channel: Arc::new(ssh_channel),
+            ssh_channel: Arc::new(Mutex::new(ssh_channel)),
             sftp_session: Arc::new(sftp_session),
         })
     }

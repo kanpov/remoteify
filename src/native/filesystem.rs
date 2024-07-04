@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use tokio::fs::{try_exists, File};
+use tokio::fs::{copy, rename, try_exists, File, OpenOptions};
 
 use super::NativeLinux;
 use crate::filesystem::LinuxFilesystem;
@@ -14,28 +14,20 @@ impl LinuxFilesystem for NativeLinux {
         try_exists(&path).await
     }
 
-    async fn get_file_writer(&self, path: &Path) -> io::Result<File> {
-        let file = match File::options().write(true).open(path).await {
-            Ok(file) => file,
-            Err(err) => return Err(err),
-        };
-        Ok(file)
+    async fn file_open_write(&self, path: &Path, truncate: bool) -> io::Result<File> {
+        internal_open_file(path, OpenOptions::new().write(true), truncate).await
     }
 
-    async fn get_file_writer_for_append(&self, path: &Path) -> io::Result<File> {
-        let file = match File::options().append(true).open(path).await {
-            Ok(file) => file,
-            Err(err) => return Err(err),
-        };
-        Ok(file)
+    async fn file_open_append(&self, path: &Path, truncate: bool) -> io::Result<File> {
+        internal_open_file(path, OpenOptions::new().append(true), truncate).await
     }
 
-    async fn get_file_reader(&self, path: &Path) -> io::Result<File> {
-        let file = match File::options().read(true).open(path).await {
-            Ok(file) => file,
-            Err(err) => return Err(err),
-        };
-        Ok(file)
+    async fn file_open_read(&self, path: &Path, truncate: bool) -> io::Result<File> {
+        internal_open_file(path, OpenOptions::new().read(true), truncate).await
+    }
+
+    async fn file_open_read_write(&self, path: &Path, truncate: bool) -> io::Result<File> {
+        internal_open_file(path, OpenOptions::new().read(true).write(true), truncate).await
     }
 
     async fn create_file(&self, path: &Path) -> io::Result<()> {
@@ -46,11 +38,32 @@ impl LinuxFilesystem for NativeLinux {
         drop(file);
         Ok(())
     }
+
+    async fn rename(&self, old_path: &Path, new_path: &Path) -> io::Result<()> {
+        rename(old_path, new_path).await
+    }
+
+    async fn copy(&self, old_path: &Path, new_path: &Path) -> io::Result<u32> {
+        copy(old_path, new_path).await.map(|x| u32::try_from(x).unwrap())
+    }
+}
+
+async fn internal_open_file(
+    path: &Path,
+    open_options: &mut OpenOptions,
+    truncate: bool,
+) -> io::Result<File> {
+    if truncate {
+        open_options.truncate(true).open(path).await
+    } else {
+        open_options.open(path).await
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{filesystem::LinuxFilesystem, native::NativeLinux};
+    use crate::filesystem::LinuxFilesystem;
+    use crate::native::NativeLinux;
     use tokio::fs::{create_dir, remove_dir, remove_file, try_exists, File};
     use uuid::Uuid;
 

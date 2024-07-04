@@ -9,9 +9,20 @@ pub trait LinuxFilesystem {
 
     async fn create_file(&self, path: &Path) -> io::Result<()>;
 
-    async fn get_file_writer(&self, path: &Path) -> io::Result<impl AsyncWriteExt>;
+    async fn file_open_write(&self, path: &Path, truncate: bool) -> io::Result<impl AsyncWriteExt>;
 
-    async fn get_file_writer_for_append(&self, path: &Path) -> io::Result<impl AsyncWriteExt>;
+    async fn file_open_append(&self, path: &Path, truncate: bool)
+        -> io::Result<impl AsyncWriteExt>;
 
-    async fn get_file_reader(&self, path: &Path) -> io::Result<impl AsyncReadExt>;
+    async fn file_open_read(&self, path: &Path, truncate: bool) -> io::Result<impl AsyncReadExt>;
+
+    async fn file_open_read_write(
+        &self,
+        path: &Path,
+        truncate: bool,
+    ) -> io::Result<impl AsyncReadExt + AsyncWriteExt>;
+
+    async fn rename(&self, old_path: &Path, new_path: &Path) -> io::Result<()>;
+
+    async fn copy(&self, old_path: &Path, new_path: &Path) -> io::Result<u32>;
 }
