@@ -49,6 +49,9 @@ mod tests {
             .unwrap();
         dbg!(loc);
 
-        ssh_linux.set_permissions(Path::new("/tmp/b.txt"), Permissions::from_mode(1000)).await.unwrap();
+        ssh_linux
+            .set_permissions(Path::new("/tmp/b.txt"), Permissions::from_mode(1000))
+            .await
+            .unwrap();
     }
 }

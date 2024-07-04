@@ -5,7 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWrite, AsyncWriteExt};
 
 #[async_trait]
 pub trait LinuxFilesystem {
@@ -15,16 +15,20 @@ pub trait LinuxFilesystem {
 
     async fn file_open_write(&self, path: &Path, truncate: bool) -> io::Result<impl AsyncWriteExt>;
 
-    async fn file_open_append(&self, path: &Path, truncate: bool)
-        -> io::Result<impl AsyncWriteExt>;
+    async fn file_open_append(&self, path: &Path) -> io::Result<impl AsyncWriteExt>;
 
-    async fn file_open_read(&self, path: &Path, truncate: bool) -> io::Result<impl AsyncReadExt>;
+    async fn file_open_read(&self, path: &Path) -> io::Result<impl AsyncReadExt + AsyncSeekExt>;
 
     async fn file_open_read_write(
         &self,
         path: &Path,
         truncate: bool,
-    ) -> io::Result<impl AsyncReadExt + AsyncWriteExt>;
+    ) -> io::Result<impl AsyncReadExt + AsyncSeekExt + AsyncWriteExt>;
+
+    async fn file_open_read_append(
+        &self,
+        path: &Path,
+    ) -> io::Result<impl AsyncReadExt + AsyncSeekExt + AsyncWriteExt>;
 
     async fn rename_file(&self, old_path: &Path, new_path: &Path) -> io::Result<()>;
 

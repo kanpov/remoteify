@@ -22,16 +22,20 @@ impl LinuxFilesystem for NativeLinux {
         internal_open_file(path, OpenOptions::new().write(true), truncate).await
     }
 
-    async fn file_open_append(&self, path: &Path, truncate: bool) -> io::Result<File> {
-        internal_open_file(path, OpenOptions::new().append(true), truncate).await
+    async fn file_open_append(&self, path: &Path) -> io::Result<File> {
+        internal_open_file(path, OpenOptions::new().append(true), false).await
     }
 
-    async fn file_open_read(&self, path: &Path, truncate: bool) -> io::Result<File> {
-        internal_open_file(path, OpenOptions::new().read(true), truncate).await
+    async fn file_open_read(&self, path: &Path) -> io::Result<File> {
+        internal_open_file(path, OpenOptions::new().read(true), false).await
     }
 
     async fn file_open_read_write(&self, path: &Path, truncate: bool) -> io::Result<File> {
         internal_open_file(path, OpenOptions::new().read(true).write(true), truncate).await
+    }
+
+    async fn file_open_read_append(&self, path: &Path) -> io::Result<File> {
+        internal_open_file(path, OpenOptions::new().read(true).append(true), false).await
     }
 
     async fn create_file(&self, path: &Path) -> io::Result<()> {

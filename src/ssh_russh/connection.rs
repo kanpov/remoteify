@@ -117,7 +117,9 @@ where
     T: client::Handler,
 {
     if result.is_err() {
-        return Some(RusshConnectionError::AuthenticationError(result.unwrap_err()));
+        return Some(RusshConnectionError::AuthenticationError(
+            result.unwrap_err(),
+        ));
     }
     None
 }

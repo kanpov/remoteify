@@ -33,18 +33,18 @@ where
         internal_open_file(&self.sftp_session, path, OpenFlags::WRITE, truncate).await
     }
 
-    async fn file_open_append(&self, path: &Path, truncate: bool) -> io::Result<File> {
+    async fn file_open_append(&self, path: &Path) -> io::Result<File> {
         internal_open_file(
             &self.sftp_session,
             path,
             OpenFlags::union(OpenFlags::WRITE, OpenFlags::APPEND),
-            truncate,
+            false,
         )
         .await
     }
 
-    async fn file_open_read(&self, path: &Path, truncate: bool) -> io::Result<File> {
-        internal_open_file(&self.sftp_session, path, OpenFlags::READ, truncate).await
+    async fn file_open_read(&self, path: &Path) -> io::Result<File> {
+        internal_open_file(&self.sftp_session, path, OpenFlags::READ, false).await
     }
 
     async fn file_open_read_write(&self, path: &Path, truncate: bool) -> io::Result<File> {
@@ -53,6 +53,16 @@ where
             path,
             OpenFlags::union(OpenFlags::READ, OpenFlags::WRITE),
             truncate,
+        )
+        .await
+    }
+
+    async fn file_open_read_append(&self, path: &Path) -> io::Result<File> {
+        internal_open_file(
+            &self.sftp_session,
+            path,
+            OpenFlags::union(OpenFlags::READ, OpenFlags::APPEND),
+            false,
         )
         .await
     }
