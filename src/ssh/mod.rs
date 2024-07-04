@@ -23,7 +23,9 @@ mod tests {
     use russh::client;
 
     use crate::{
-        filesystem::LinuxFilesystem, ssh::{SshAuthentication, SshConnectionOptions, TrustingHandler}, SshLinux
+        filesystem::LinuxFilesystem,
+        ssh::{SshAuthentication, SshConnectionOptions, TrustingHandler},
+        SshLinux,
     };
 
     #[tokio::test]
@@ -37,8 +39,13 @@ mod tests {
                 password: "root123".into(),
             },
         };
-        let ssh_linux = SshLinux::connect(TrustingHandler {}, conn_opt).await.unwrap();
-        ssh_linux.create_file(Path::new("/tmp/a.txt")).await.unwrap();
+        let ssh_linux = SshLinux::connect(TrustingHandler {}, conn_opt)
+            .await
+            .unwrap();
+        ssh_linux
+            .write_text_to_file(Path::new("/tmp/a.txt"), &"testa".to_string())
+            .await
+            .unwrap();
         dbg!(true);
     }
 }

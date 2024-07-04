@@ -83,39 +83,29 @@ where
             }
         }
 
-        let sftp_channel_result = handle.channel_open_session().await;
-        if sftp_channel_result.is_err() {
-            return Err(SshConnectionError::ChannelOpenError(
-                sftp_channel_result.unwrap_err(),
-            ));
-        }
-        let sftp_channel = sftp_channel_result.unwrap();
+        let sftp_channel = match handle.channel_open_session().await {
+            Ok(channel) => channel,
+            Err(err) => return Err(SshConnectionError::ChannelOpenError(err))
+        };
 
-        let sftp_result = sftp_channel.request_subsystem(true, "sftp").await;
-        if sftp_result.is_err() {
-            return Err(SshConnectionError::SftpRequestError(
-                sftp_result.unwrap_err(),
-            ));
+        match sftp_channel.request_subsystem(true, "sftp").await {
+            Ok(_) => {},
+            Err(err) => return Err(SshConnectionError::SftpRequestError(err))
         }
 
-        let sftp_session_result = SftpSession::new(sftp_channel.into_stream()).await;
-        if sftp_session_result.is_err() {
-            return Err(SshConnectionError::SftpOpenError(
-                sftp_session_result.err().unwrap(),
-            ));
-        }
-        let sftp_session = sftp_session_result.unwrap();
+        let sftp_session = match SftpSession::new(sftp_channel.into_stream()).await {
+            Ok(session) => session,
+            Err(err) => return Err(SshConnectionError::SftpOpenError(err))
+        };
 
-        let ssh_channel_result = handle.channel_open_session().await;
-        if ssh_channel_result.is_err() {
-            return Err(SshConnectionError::ChannelOpenError(
-                ssh_channel_result.unwrap_err(),
-            ));
-        }
+        let ssh_channel = match handle.channel_open_session().await {
+            Ok(channel) => channel,
+            Err(err) => return Err(SshConnectionError::ChannelOpenError(err))
+        };
 
         Ok(SshLinux {
             handle: Arc::new(handle),
-            ssh_channel: Arc::new(ssh_channel_result.unwrap()),
+            ssh_channel: Arc::new(ssh_channel),
             sftp_session: Arc::new(sftp_session),
         })
     }
