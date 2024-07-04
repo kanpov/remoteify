@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc};
+use std::{path::{Path, PathBuf}, sync::Arc};
 
 use async_trait::async_trait;
 use russh::{client, ChannelMsg};
@@ -50,7 +50,7 @@ where
     }
 
     async fn create_file(&self, path: &Path) -> io::Result<()> {
-        let file = match self.sftp_session.create(path_to_str(&path)).await {
+        let file = match self.sftp_session.create(path_to_str(path)).await {
             Ok(file) => file,
             Err(err) => return Err(io::Error::other(err)),
         };
@@ -58,15 +58,15 @@ where
         Ok(())
     }
 
-    async fn rename(&self, old_path: &Path, new_path: &Path) -> io::Result<()> {
+    async fn rename_file(&self, old_path: &Path, new_path: &Path) -> io::Result<()> {
         internal_wrap_res(
             self.sftp_session
-                .rename(path_to_str(&old_path), path_to_str(&new_path))
+                .rename(path_to_str(old_path), path_to_str(new_path))
                 .await,
         )
     }
 
-    async fn copy(&self, old_path: &Path, new_path: &Path) -> io::Result<u32> {
+    async fn copy_file(&self, old_path: &Path, new_path: &Path) -> io::Result<u32> {
         let mut chan = self.ssh_channel.lock().await;
         let exec_result = chan.exec(true, format!("cp {} {}", path_to_str(old_path), path_to_str(new_path))).await;
         if exec_result.is_err() {
@@ -91,6 +91,14 @@ where
             Some(code) => Ok(code),
             None => Err(io::Error::other("the cp command did not shut down gracefully"))
         }
+    }
+
+    async fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> {
+        let path_buf = match self.sftp_session.canonicalize(path_to_str(path)).await {
+            Ok(path) => PathBuf::from(path),
+            Err(err) => return Err(io::Error::other(err))
+        };
+        Ok(path_buf)
     }
 }
 

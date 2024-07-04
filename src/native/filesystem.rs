@@ -1,11 +1,11 @@
 use async_trait::async_trait;
-use tokio::fs::{copy, rename, try_exists, File, OpenOptions};
+use tokio::fs::{canonicalize, copy, rename, try_exists, File, OpenOptions};
 
 use super::NativeLinux;
 use crate::filesystem::LinuxFilesystem;
 use std::{
-    io::{self},
-    path::Path,
+    io,
+    path::{Path, PathBuf},
 };
 
 #[async_trait]
@@ -31,7 +31,7 @@ impl LinuxFilesystem for NativeLinux {
     }
 
     async fn create_file(&self, path: &Path) -> io::Result<()> {
-        let file = match File::create_new(&path).await {
+        let file = match File::create_new(path).await {
             Ok(file) => file,
             Err(err) => return Err(err),
         };
@@ -39,12 +39,16 @@ impl LinuxFilesystem for NativeLinux {
         Ok(())
     }
 
-    async fn rename(&self, old_path: &Path, new_path: &Path) -> io::Result<()> {
+    async fn rename_file(&self, old_path: &Path, new_path: &Path) -> io::Result<()> {
         rename(old_path, new_path).await
     }
 
-    async fn copy(&self, old_path: &Path, new_path: &Path) -> io::Result<u32> {
+    async fn copy_file(&self, old_path: &Path, new_path: &Path) -> io::Result<u32> {
         copy(old_path, new_path).await.map(|x| u32::try_from(x).unwrap())
+    }
+    
+    async fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> {
+        canonicalize(path).await
     }
 }
 

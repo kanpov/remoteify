@@ -1,4 +1,4 @@
-use std::{io, path::Path};
+use std::{io, path::{Path, PathBuf}};
 
 use async_trait::async_trait;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -22,7 +22,9 @@ pub trait LinuxFilesystem {
         truncate: bool,
     ) -> io::Result<impl AsyncReadExt + AsyncWriteExt>;
 
-    async fn rename(&self, old_path: &Path, new_path: &Path) -> io::Result<()>;
+    async fn rename_file(&self, old_path: &Path, new_path: &Path) -> io::Result<()>;
 
-    async fn copy(&self, old_path: &Path, new_path: &Path) -> io::Result<u32>;
+    async fn copy_file(&self, old_path: &Path, new_path: &Path) -> io::Result<u32>;
+
+    async fn canonicalize(&self, path: &Path) -> io::Result<PathBuf>;
 }

@@ -21,7 +21,7 @@ mod tests {
     use std::path::Path;
 
     use russh::client;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::io::AsyncReadExt;
 
     use crate::{
         filesystem::LinuxFilesystem,
@@ -43,15 +43,7 @@ mod tests {
         let ssh_linux = SshLinux::connect(TrustingHandler {}, conn_opt)
             .await
             .unwrap();
-        let mut reader_writer = ssh_linux
-            .file_open_read_write(Path::new("/tmp/a.txt"), false)
-            .await
-            .unwrap();
-        let mut buf = String::new();
-        reader_writer.read_to_string(&mut buf).await.unwrap();
-        drop(reader_writer);
-        dbg!(buf);
-
-        ssh_linux.copy(Path::new("/tmp/c.txt"), Path::new("/tmp/d.txt")).await.unwrap();
+        let path_buf = ssh_linux.canonicalize(Path::new("/tmp/..")).await.unwrap();
+        dbg!(path_buf);
     }
 }
