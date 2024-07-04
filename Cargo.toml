@@ -8,6 +8,7 @@ description = "LHF (Linux Host Framework) is a set of contracts that allow using
 tokio = { version = "1.38.0", features = ["rt", "macros", "fs"] }
 russh = "0.43.0"
 russh-keys = "0.43.0"
+russh-sftp = "2.0.1"
 async-trait = "0.1.80"
 
 [dev-dependencies]

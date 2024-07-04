@@ -1,24 +1,29 @@
-mod filesystem;
 mod connection;
+mod filesystem;
+
+use std::sync::Arc;
 
 pub use connection::*;
-use russh::client;
+use russh::client::{self, Msg};
 
 pub struct SshLinux<T>
 where
     T: client::Handler,
     T: 'static,
 {
-    handle: client::Handle<T>,
+    handle: Arc<client::Handle<T>>,
+    ssh_channel: Arc<russh::Channel<Msg>>,
+    sftp_session: Arc<russh_sftp::client::SftpSession>,
 }
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use russh::client;
 
     use crate::{
-        ssh::{SshAuthentication, SshConnectionOptions, TrustingHandler},
-        SshLinux,
+        filesystem::LinuxFilesystem, ssh::{SshAuthentication, SshConnectionOptions, TrustingHandler}, SshLinux
     };
 
     #[tokio::test]
@@ -32,7 +37,8 @@ mod tests {
                 password: "root123".into(),
             },
         };
-        let ssh_linux = SshLinux::connect(TrustingHandler {}, conn_opt).await;
-        ssh_linux.unwrap();
+        let ssh_linux = SshLinux::connect(TrustingHandler {}, conn_opt).await.unwrap();
+        ssh_linux.create_file(Path::new("/tmp/a.txt")).await.unwrap();
+        dbg!(true);
     }
 }

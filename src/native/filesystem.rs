@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use tokio::fs::{try_exists, write, File};
 
 use super::NativeLinux;
@@ -7,6 +8,7 @@ use std::{
     path::Path,
 };
 
+#[async_trait]
 impl LinuxFilesystem for NativeLinux {
     async fn exists(&self, path: &Path) -> io::Result<bool> {
         try_exists(&path).await
