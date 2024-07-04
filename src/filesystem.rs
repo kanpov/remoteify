@@ -11,4 +11,8 @@ pub trait LinuxFilesystem {
     async fn write_text_to_file(&self, path: &Path, text: &String) -> io::Result<()>;
 
     async fn write_bytes_to_file(&self, path: &Path, bytes: &[u8]) -> io::Result<()>;
+
+    async fn append_text_to_file(&self, path: &Path, text: &String) -> io::Result<()>;
+
+    async fn append_bytes_to_file(&self, path: &Path, bytes: &[u8]) -> io::Result<()>;
 }

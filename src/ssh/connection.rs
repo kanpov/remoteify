@@ -85,22 +85,22 @@ where
 
         let sftp_channel = match handle.channel_open_session().await {
             Ok(channel) => channel,
-            Err(err) => return Err(SshConnectionError::ChannelOpenError(err))
+            Err(err) => return Err(SshConnectionError::ChannelOpenError(err)),
         };
 
         match sftp_channel.request_subsystem(true, "sftp").await {
-            Ok(_) => {},
-            Err(err) => return Err(SshConnectionError::SftpRequestError(err))
+            Ok(_) => {}
+            Err(err) => return Err(SshConnectionError::SftpRequestError(err)),
         }
 
         let sftp_session = match SftpSession::new(sftp_channel.into_stream()).await {
             Ok(session) => session,
-            Err(err) => return Err(SshConnectionError::SftpOpenError(err))
+            Err(err) => return Err(SshConnectionError::SftpOpenError(err)),
         };
 
         let ssh_channel = match handle.channel_open_session().await {
             Ok(channel) => channel,
-            Err(err) => return Err(SshConnectionError::ChannelOpenError(err))
+            Err(err) => return Err(SshConnectionError::ChannelOpenError(err)),
         };
 
         Ok(SshLinux {

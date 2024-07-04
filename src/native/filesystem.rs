@@ -1,5 +1,8 @@
 use async_trait::async_trait;
-use tokio::fs::{try_exists, write, File};
+use tokio::{
+    fs::{try_exists, write, File},
+    io::AsyncWriteExt,
+};
 
 use super::NativeLinux;
 use crate::filesystem::LinuxFilesystem;
@@ -32,11 +35,31 @@ impl LinuxFilesystem for NativeLinux {
         write(path, bytes).await?;
         Ok(())
     }
+
+    async fn append_text_to_file(&self, path: &Path, text: &String) -> io::Result<()> {
+        self.append_bytes_to_file(path, text.as_bytes()).await
+    }
+
+    async fn append_bytes_to_file(&self, path: &Path, bytes: &[u8]) -> io::Result<()> {
+        let mut file = match File::options().append(true).open(path).await {
+            Ok(file) => file,
+            Err(err) => return Err(err),
+        };
+        match file.write(bytes).await {
+            Ok(_) => {}
+            Err(err) => return Err(err),
+        };
+        drop(file);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use tokio::fs::{create_dir, read_to_string, remove_dir, remove_file, try_exists, File};
+    use tokio::{
+        fs::{create_dir, read_to_string, remove_dir, remove_file, try_exists, File},
+        io::AsyncWriteExt,
+    };
     use uuid::Uuid;
 
     use crate::{filesystem::LinuxFilesystem, native::NativeLinux};
@@ -95,6 +118,34 @@ mod tests {
             .expect("Failed call");
         let actual_content = read_to_string(&path).await.expect("Failed to read");
         assert_eq!(actual_content.as_bytes(), content);
+        remove_file(&path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn append_text_to_file_persists() {
+        let path = make_tmp_path();
+        let mut file = File::create_new(&path).await.unwrap();
+        file.write_all(b"first").await.unwrap();
+        drop(file);
+        IMPL.append_text_to_file(path.as_ref(), &"second".to_string())
+            .await
+            .expect("Failed call");
+        let actual_content = read_to_string(&path).await.expect("Failed to read");
+        assert_eq!(actual_content, "firstsecond");
+        remove_file(&path).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn append_bytes_to_file_persists() {
+        let path = make_tmp_path();
+        let mut file = File::create_new(&path).await.unwrap();
+        file.write_all(b"one").await.unwrap();
+        drop(file);
+        IMPL.append_bytes_to_file(path.as_ref(), b"two")
+            .await
+            .expect("Failed call");
+        let actual_content = read_to_string(&path).await.expect("Failed to read");
+        assert_eq!(actual_content, "onetwo");
         remove_file(&path).await.unwrap();
     }
 

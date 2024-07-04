@@ -43,7 +43,7 @@ mod tests {
             .await
             .unwrap();
         ssh_linux
-            .write_text_to_file(Path::new("/tmp/a.txt"), &"testa".to_string())
+            .append_text_to_file(Path::new("/tmp/c.txt"), &"testa".to_string())
             .await
             .unwrap();
         dbg!(true);
