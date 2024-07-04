@@ -1,4 +1,8 @@
-use std::{io, path::{Path, PathBuf}};
+use std::{
+    fs::Permissions,
+    io,
+    path::{Path, PathBuf},
+};
 
 use async_trait::async_trait;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -24,7 +28,15 @@ pub trait LinuxFilesystem {
 
     async fn rename_file(&self, old_path: &Path, new_path: &Path) -> io::Result<()>;
 
-    async fn copy_file(&self, old_path: &Path, new_path: &Path) -> io::Result<u32>;
+    async fn copy_file(&self, old_path: &Path, new_path: &Path) -> io::Result<Option<u64>>;
 
     async fn canonicalize(&self, path: &Path) -> io::Result<PathBuf>;
+
+    async fn symlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()>;
+
+    async fn hardlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()>;
+
+    async fn read_link(&self, link_path: &Path) -> io::Result<PathBuf>;
+
+    async fn set_permissions(&self, path: &Path, permissions: Permissions) -> io::Result<()>;
 }

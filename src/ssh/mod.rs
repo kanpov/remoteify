@@ -18,10 +18,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
+    use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::Path};
 
     use russh::client;
-    use tokio::io::AsyncReadExt;
 
     use crate::{
         filesystem::LinuxFilesystem,
@@ -43,7 +42,13 @@ mod tests {
         let ssh_linux = SshLinux::connect(TrustingHandler {}, conn_opt)
             .await
             .unwrap();
-        let path_buf = ssh_linux.canonicalize(Path::new("/tmp/..")).await.unwrap();
-        dbg!(path_buf);
+
+        let loc = ssh_linux
+            .read_link(Path::new("/tmp/link.txt"))
+            .await
+            .unwrap();
+        dbg!(loc);
+
+        ssh_linux.set_permissions(Path::new("/tmp/b.txt"), Permissions::from_mode(1000)).await.unwrap();
     }
 }

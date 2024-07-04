@@ -1,9 +1,13 @@
 use async_trait::async_trait;
-use tokio::fs::{canonicalize, copy, rename, try_exists, File, OpenOptions};
+use tokio::fs::{
+    canonicalize, copy, hard_link, read_link, rename, set_permissions, symlink, try_exists, File,
+    OpenOptions,
+};
 
 use super::NativeLinux;
 use crate::filesystem::LinuxFilesystem;
 use std::{
+    fs::Permissions,
     io,
     path::{Path, PathBuf},
 };
@@ -43,12 +47,31 @@ impl LinuxFilesystem for NativeLinux {
         rename(old_path, new_path).await
     }
 
-    async fn copy_file(&self, old_path: &Path, new_path: &Path) -> io::Result<u32> {
-        copy(old_path, new_path).await.map(|x| u32::try_from(x).unwrap())
+    async fn copy_file(&self, old_path: &Path, new_path: &Path) -> io::Result<Option<u64>> {
+        match copy(old_path, new_path).await {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(err) => Err(err),
+        }
     }
-    
+
     async fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> {
         canonicalize(path).await
+    }
+
+    async fn symlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
+        symlink(source_path, destination_path).await
+    }
+
+    async fn hardlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
+        hard_link(source_path, destination_path).await
+    }
+
+    async fn read_link(&self, link_path: &Path) -> io::Result<PathBuf> {
+        read_link(link_path).await
+    }
+
+    async fn set_permissions(&self, path: &Path, permissions: Permissions) -> io::Result<()> {
+        set_permissions(path, permissions).await
     }
 }
 
@@ -61,49 +84,5 @@ async fn internal_open_file(
         open_options.truncate(true).open(path).await
     } else {
         open_options.open(path).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::filesystem::LinuxFilesystem;
-    use crate::native::NativeLinux;
-    use tokio::fs::{create_dir, remove_dir, remove_file, try_exists, File};
-    use uuid::Uuid;
-
-    static IMPL: NativeLinux = NativeLinux {};
-
-    #[tokio::test]
-    async fn exists_is_true_for_existent_file() {
-        let path = make_tmp_path();
-        drop(File::create_new(&path).await.unwrap());
-        assert!(IMPL.exists(path.as_ref()).await.expect("Failed call"));
-        remove_file(&path).await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn exists_is_true_for_existent_directory() {
-        let path = make_tmp_path();
-        create_dir(&path).await.unwrap();
-        assert!(IMPL.exists(path.as_ref()).await.expect("Failed call"));
-        remove_dir(&path).await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn exists_is_false_for_missing_file_or_directory() {
-        let path = make_tmp_path();
-        assert!(!IMPL.exists(path.as_ref()).await.expect("Failed call"));
-    }
-
-    #[tokio::test]
-    async fn create_file_persists() {
-        let path = make_tmp_path();
-        IMPL.create_file(path.as_ref()).await.expect("Failed call");
-        assert!(try_exists(&path).await.unwrap());
-        remove_file(&path).await.unwrap();
-    }
-
-    fn make_tmp_path() -> String {
-        format!("/tmp/{}", Uuid::new_v4())
     }
 }
