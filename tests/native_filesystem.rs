@@ -3,7 +3,10 @@ use std::{fs::Permissions, io::SeekFrom, os::unix::fs::PermissionsExt, path::Pat
 use common::get_tmp_path;
 use lhf::{filesystem::LinuxFilesystem, NativeLinux};
 use tokio::{
-    fs::{create_dir, metadata, read_to_string, remove_dir, remove_file, symlink, symlink_metadata, try_exists, write, File},
+    fs::{
+        create_dir, metadata, read_to_string, remove_dir, remove_file, symlink, symlink_metadata,
+        try_exists, write, File,
+    },
     io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
 };
 mod common;
@@ -104,7 +107,10 @@ async fn file_open_read_write_non_truncate() {
 async fn file_open_read_write_truncate() {
     let path = get_tmp_path();
     write(&path, "content").await.unwrap();
-    let mut read_writer = IMPL.file_open_read_write(&path, true).await.expect("Call failed");
+    let mut read_writer = IMPL
+        .file_open_read_write(&path, true)
+        .await
+        .expect("Call failed");
     read_writer.write_all(b"con").await.unwrap();
     let mut buf = String::new();
     read_writer.seek(SeekFrom::Start(0)).await.unwrap();
@@ -117,7 +123,10 @@ async fn file_open_read_write_truncate() {
 async fn file_open_read_append() {
     let path = get_tmp_path();
     write(&path, "content").await.unwrap();
-    let mut read_writer = IMPL.file_open_read_append(&path).await.expect("Call failed");
+    let mut read_writer = IMPL
+        .file_open_read_append(&path)
+        .await
+        .expect("Call failed");
     read_writer.write_all(b"next").await.unwrap();
     let mut buf = String::new();
     read_writer.seek(SeekFrom::Start(0)).await.unwrap();
@@ -139,7 +148,9 @@ async fn rename_file_should_persist() {
     let old_path = get_tmp_path();
     let new_path = get_tmp_path();
     File::create_new(&old_path).await.unwrap();
-    IMPL.rename_file(&old_path, &new_path).await.expect("Call failed");
+    IMPL.rename_file(&old_path, &new_path)
+        .await
+        .expect("Call failed");
     assert!(!try_exists(&old_path).await.unwrap());
     assert!(try_exists(&new_path).await.unwrap());
     remove_file(&new_path).await.unwrap();
@@ -150,7 +161,9 @@ async fn copy_file_should_persist() {
     let old_path = get_tmp_path();
     let new_path = get_tmp_path();
     write(&old_path, "content").await.unwrap();
-    IMPL.copy_file(&old_path, &new_path).await.expect("Call failed");
+    IMPL.copy_file(&old_path, &new_path)
+        .await
+        .expect("Call failed");
     assert_eq!(read_to_string(&new_path).await.unwrap(), "content");
     remove_file(&old_path).await.unwrap();
     remove_file(&new_path).await.unwrap();
@@ -158,7 +171,10 @@ async fn copy_file_should_persist() {
 
 #[tokio::test]
 async fn canonicalize_should_perform_operation() {
-    let canonicalized_path = IMPL.canonicalize(Path::new("/tmp/../tmp/../tmp")).await.expect("Call failed");
+    let canonicalized_path = IMPL
+        .canonicalize(Path::new("/tmp/../tmp/../tmp"))
+        .await
+        .expect("Call failed");
     assert_eq!(canonicalized_path.to_str().unwrap(), "/tmp");
 }
 
@@ -167,7 +183,9 @@ async fn symlink_should_establish_link() {
     let src_path = get_tmp_path();
     let dst_path = get_tmp_path();
     write(&src_path, "").await.unwrap();
-    IMPL.symlink(&src_path, &dst_path).await.expect("Call failed");
+    IMPL.symlink(&src_path, &dst_path)
+        .await
+        .expect("Call failed");
     assert!(try_exists(&dst_path).await.unwrap());
     assert!(symlink_metadata(&dst_path).await.is_ok());
     remove_file(&src_path).await.unwrap();
@@ -179,7 +197,9 @@ async fn hard_link_should_establish_link() {
     let src_path = get_tmp_path();
     let dst_path = get_tmp_path();
     write(&src_path, "content").await.unwrap();
-    IMPL.hardlink(&src_path, &dst_path).await.expect("Call failed");
+    IMPL.hardlink(&src_path, &dst_path)
+        .await
+        .expect("Call failed");
     assert!(try_exists(&dst_path).await.unwrap());
     assert_eq!(read_to_string(&dst_path).await.unwrap(), "content");
     remove_file(&src_path).await.unwrap();
@@ -201,7 +221,9 @@ async fn read_link_should_return_correct_location() {
 async fn set_permissions_should_perform_update() {
     let path = get_tmp_path();
     write(&path, "content").await.unwrap();
-    IMPL.set_permissions(&path, Permissions::from_mode(777)).await.unwrap();
+    IMPL.set_permissions(&path, Permissions::from_mode(777))
+        .await
+        .unwrap();
     let meta = metadata(&path).await.unwrap();
     assert_eq!(meta.permissions().mode(), 33545);
     remove_file(&path).await.unwrap();
