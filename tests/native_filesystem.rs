@@ -1,7 +1,7 @@
 use std::{fs::Permissions, io::SeekFrom, os::unix::fs::PermissionsExt, path::Path};
 
 use common::get_tmp_path;
-use lhf::{filesystem::LinuxFilesystem, NativeLinux};
+use lhf::{filesystem::LinuxFilesystem, native::NativeLinux};
 use tokio::{
     fs::{
         create_dir, metadata, read_to_string, remove_dir, remove_file, symlink, symlink_metadata,
