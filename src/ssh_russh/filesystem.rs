@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use russh::{client, ChannelMsg};
 use russh_sftp::{
     client::fs::{File, Metadata},
-    protocol::{FileType, OpenFlags},
+    protocol::{FileAttributes, FileType, OpenFlags},
 };
 use std::io::{self};
 
@@ -75,7 +75,7 @@ where
         Ok(path_buf)
     }
 
-    async fn symlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
+    async fn create_symlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
         wrap_res(
             self.sftp_session
                 .symlink(conv_path(source_path), conv_path(destination_path))
@@ -83,7 +83,7 @@ where
         )
     }
 
-    async fn hardlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
+    async fn create_hard_link(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
         match run_fs_command(
             self,
             format!("ln {} {}", conv_path(source_path), conv_path(destination_path)),
@@ -205,26 +205,17 @@ where
     }
 
     async fn get_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata> {
-        let fetched_metadata = match self.sftp_session.metadata(conv_path(path)).await {
-            Ok(fetched_metadata) => fetched_metadata,
-            Err(err) => return Err(io::Error::other(err)),
-        };
+        match self.sftp_session.metadata(conv_path(path)).await {
+            Ok(attrs) => Ok(attrs.into()),
+            Err(err) => Err(io::Error::other(err)),
+        }
+    }
 
-        Ok(LinuxFileMetadata::new(
-            Some(fetched_metadata.file_type().into()),
-            fetched_metadata.size,
-            match fetched_metadata.permissions {
-                Some(bit) => Some(Permissions::from_mode(bit)),
-                None => None,
-            },
-            fetched_metadata.modified().ok(),
-            fetched_metadata.accessed().ok(),
-            None,
-            fetched_metadata.uid,
-            fetched_metadata.user,
-            fetched_metadata.gid,
-            fetched_metadata.group,
-        ))
+    async fn get_symlink_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata> {
+        match self.sftp_session.symlink_metadata(conv_path(path)).await {
+            Ok(attrs) => Ok(attrs.into()),
+            Err(err) => Err(io::Error::other(err)),
+        }
     }
 }
 
@@ -275,4 +266,24 @@ fn wrap_res<T>(result: Result<T, russh_sftp::client::error::Error>) -> io::Resul
 
 fn conv_path(path: &Path) -> String {
     String::from(path.to_str().unwrap())
+}
+
+impl Into<LinuxFileMetadata> for FileAttributes {
+    fn into(self) -> LinuxFileMetadata {
+        LinuxFileMetadata::new(
+            Some(self.file_type().into()),
+            self.size,
+            match self.permissions {
+                Some(bit) => Some(Permissions::from_mode(bit)),
+                None => None,
+            },
+            self.modified().ok(),
+            self.accessed().ok(),
+            None,
+            self.uid,
+            self.user,
+            self.gid,
+            self.group,
+        )
+    }
 }

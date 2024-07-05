@@ -223,9 +223,9 @@ pub trait LinuxFilesystem {
 
     async fn canonicalize(&self, path: &Path) -> io::Result<PathBuf>;
 
-    async fn symlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()>;
+    async fn create_symlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()>;
 
-    async fn hardlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()>;
+    async fn create_hard_link(&self, source_path: &Path, destination_path: &Path) -> io::Result<()>;
 
     async fn read_link(&self, link_path: &Path) -> io::Result<PathBuf>;
 
@@ -244,4 +244,6 @@ pub trait LinuxFilesystem {
     async fn remove_dir_recursively(&self, path: &Path) -> io::Result<()>;
 
     async fn get_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata>;
+
+    async fn get_symlink_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata>;
 }

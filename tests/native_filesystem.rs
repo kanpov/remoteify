@@ -1,4 +1,8 @@
-use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::Path};
+use std::{
+    fs::Permissions,
+    os::unix::fs::{MetadataExt, PermissionsExt},
+    path::Path,
+};
 
 use common::{entries_contain, gen_nested_tmp_path, gen_tmp_path};
 use lhf::{
@@ -147,7 +151,7 @@ async fn symlink_should_establish_link() {
     let src_path = gen_tmp_path();
     let dst_path = gen_tmp_path();
     write(&src_path, "").await.unwrap();
-    IMPL.symlink(&src_path, &dst_path).await.expect("Call failed");
+    IMPL.create_symlink(&src_path, &dst_path).await.expect("Call failed");
     assert!(try_exists(&dst_path).await.unwrap());
     assert!(symlink_metadata(&dst_path).await.is_ok());
     remove_file(&src_path).await.unwrap();
@@ -159,7 +163,7 @@ async fn hard_link_should_establish_link() {
     let src_path = gen_tmp_path();
     let dst_path = gen_tmp_path();
     write(&src_path, "content").await.unwrap();
-    IMPL.hardlink(&src_path, &dst_path).await.expect("Call failed");
+    IMPL.create_hard_link(&src_path, &dst_path).await.expect("Call failed");
     assert!(try_exists(&dst_path).await.unwrap());
     assert_eq!(read_to_string(&dst_path).await.unwrap(), "content");
     remove_file(&src_path).await.unwrap();
@@ -246,7 +250,31 @@ async fn remove_dir_recursively_should_persist() {
 }
 
 #[tokio::test]
-async fn t() {
-    let m = IMPL.get_metadata(Path::new("/tmp")).await.unwrap();
-    dbg!(m);
+async fn get_metadata_should_return_correct_result() {
+    let path = gen_tmp_path();
+    write(&path, b"content").await.unwrap();
+    let expected_metadata = metadata(&path).await.unwrap();
+    let actual_metadata = IMPL.get_metadata(&path).await.expect("Call failed");
+
+    assert!(matches!(actual_metadata.file_type().unwrap(), LinuxFileType::File));
+    assert_eq!(actual_metadata.size().unwrap(), expected_metadata.size());
+    assert_eq!(actual_metadata.permissions().unwrap(), expected_metadata.permissions());
+    assert_eq!(
+        actual_metadata.modified_time().unwrap(),
+        expected_metadata.modified().unwrap()
+    );
+    assert_eq!(
+        actual_metadata.accessed_time().unwrap(),
+        expected_metadata.accessed().unwrap()
+    );
+    assert_eq!(
+        actual_metadata.created_time().unwrap(),
+        expected_metadata.created().unwrap()
+    );
+    assert_eq!(actual_metadata.user_id().unwrap(), expected_metadata.uid());
+    assert_eq!(actual_metadata.user_name(), None);
+    assert_eq!(actual_metadata.group_id().unwrap(), expected_metadata.gid());
+    assert_eq!(actual_metadata.group_name(), None);
+
+    remove_file(&path).await.unwrap();
 }

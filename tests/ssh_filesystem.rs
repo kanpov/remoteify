@@ -154,7 +154,7 @@ async fn symlink_should_perform_linking() {
     let dst_path = gen_tmp_path();
     test_data
         .implementation
-        .symlink(&src_path, &dst_path)
+        .create_symlink(&src_path, &dst_path)
         .await
         .expect("Call failed");
     assert_eq!(
@@ -170,7 +170,7 @@ async fn hardlink_should_perform_linking() {
     let dst_path = gen_tmp_path();
     test_data
         .implementation
-        .hardlink(&src_path, &dst_path)
+        .create_hard_link(&src_path, &dst_path)
         .await
         .expect("Call failed");
     test_data.assert_file(&src_path, "content").await;

@@ -1,13 +1,13 @@
 use async_trait::async_trait;
 use tokio::fs::{
     canonicalize, copy, create_dir, create_dir_all, hard_link, metadata, read_dir, read_link, remove_dir,
-    remove_dir_all, remove_file, rename, set_permissions, symlink, try_exists, File, OpenOptions,
+    remove_dir_all, remove_file, rename, set_permissions, symlink, symlink_metadata, try_exists, File, OpenOptions,
 };
 
 use super::NativeLinux;
 use crate::filesystem::{LinuxDirEntry, LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions};
 use std::{
-    fs::{FileType, Permissions},
+    fs::{FileType, Metadata, Permissions},
     io,
     os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
@@ -64,11 +64,11 @@ impl LinuxFilesystem for NativeLinux {
         canonicalize(path).await
     }
 
-    async fn symlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
+    async fn create_symlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
         symlink(source_path, destination_path).await
     }
 
-    async fn hardlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
+    async fn create_hard_link(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
         hard_link(source_path, destination_path).await
     }
 
@@ -136,34 +136,45 @@ impl LinuxFilesystem for NativeLinux {
     }
 
     async fn get_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata> {
-        let fetched_metadata = metadata(path).await?;
-        Ok(LinuxFileMetadata::new(
-            Some(fetched_metadata.file_type().into()),
-            Some(fetched_metadata.size()),
-            Some(fetched_metadata.permissions()),
-            fetched_metadata.modified().ok(),
-            fetched_metadata.accessed().ok(),
-            fetched_metadata.created().ok(),
-            Some(fetched_metadata.uid()),
-            None,
-            Some(fetched_metadata.gid()),
-            None,
-        ))
+        let metadata = metadata(path).await?;
+        Ok(metadata.into())
+    }
+
+    async fn get_symlink_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata> {
+        let metadata = symlink_metadata(path).await?;
+        Ok(metadata.into())
     }
 }
 
-impl From<FileType> for LinuxFileType {
-    fn from(value: FileType) -> Self {
-        if value.is_file() {
+impl Into<LinuxFileType> for FileType {
+    fn into(self) -> LinuxFileType {
+        if self.is_file() {
             return LinuxFileType::File;
         }
-        if value.is_dir() {
+        if self.is_dir() {
             return LinuxFileType::Dir;
         }
-        if value.is_symlink() {
+        if self.is_symlink() {
             return LinuxFileType::Symlink;
         }
 
         LinuxFileType::Other
+    }
+}
+
+impl Into<LinuxFileMetadata> for Metadata {
+    fn into(self) -> LinuxFileMetadata {
+        LinuxFileMetadata::new(
+            Some(self.file_type().into()),
+            Some(self.size()),
+            Some(self.permissions()),
+            self.modified().ok(),
+            self.accessed().ok(),
+            self.created().ok(),
+            Some(self.uid()),
+            None,
+            Some(self.gid()),
+            None,
+        )
     }
 }
