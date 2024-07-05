@@ -217,3 +217,11 @@ async fn set_permissions_should_perform_change() {
         33545
     );
 }
+
+#[tokio::test]
+async fn remove_file_should_persist_changes() {
+    let test_data = TestData::setup().await;
+    let path = test_data.init_file("content").await;
+    test_data.implementation.remove_file(&path).await.expect("Call failed");
+    assert!(!test_data.sftp.try_exists(conv_path(&path)).await.unwrap());
+}

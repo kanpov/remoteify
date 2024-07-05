@@ -126,6 +126,10 @@ where
                 .await,
         )
     }
+
+    async fn remove_file(&self, path: &Path) -> io::Result<()> {
+        internal_wrap_res(self.sftp_session.remove_file(path_to_str(path)).await)
+    }
 }
 
 async fn internal_run_fs_command<T>(instance: &RusshLinux<T>, command: String) -> io::Result<Option<u32>>
@@ -156,10 +160,10 @@ where
 }
 
 fn internal_wrap_res<T>(result: Result<T, russh_sftp::client::error::Error>) -> io::Result<T> {
-    if result.is_err() {
-        return Err(io::Error::other(result.err().unwrap()));
+    match result {
+        Ok(val) => Ok(val),
+        Err(err) => Err(io::Error::other(err)),
     }
-    Ok(result.unwrap())
 }
 
 fn path_to_str(path: &Path) -> String {

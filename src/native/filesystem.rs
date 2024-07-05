@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use tokio::fs::{
-    canonicalize, copy, hard_link, read_link, rename, set_permissions, symlink, try_exists, File, OpenOptions,
+    canonicalize, copy, hard_link, read_link, remove_file, rename, set_permissions, symlink, try_exists, File,
+    OpenOptions,
 };
 
 use super::NativeLinux;
@@ -76,5 +77,9 @@ impl LinuxFilesystem for NativeLinux {
 
     async fn set_permissions(&self, path: &Path, permissions: Permissions) -> io::Result<()> {
         set_permissions(path, permissions).await
+    }
+
+    async fn remove_file(&self, path: &Path) -> io::Result<()> {
+        remove_file(path).await
     }
 }

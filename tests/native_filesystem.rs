@@ -186,3 +186,11 @@ async fn set_permissions_should_perform_update() {
     assert_eq!(meta.permissions().mode(), 33545);
     remove_file(&path).await.unwrap();
 }
+
+#[tokio::test]
+async fn remove_file_should_persist_changes() {
+    let path = gen_tmp_path();
+    write(&path, "content").await.unwrap();
+    IMPL.remove_file(&path).await.expect("Call failed");
+    assert!(!try_exists(&path).await.unwrap());
+}

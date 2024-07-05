@@ -98,4 +98,6 @@ pub trait LinuxFilesystem {
     async fn read_link(&self, link_path: &Path) -> io::Result<PathBuf>;
 
     async fn set_permissions(&self, path: &Path, permissions: Permissions) -> io::Result<()>;
+
+    async fn remove_file(&self, path: &Path) -> io::Result<()>;
 }

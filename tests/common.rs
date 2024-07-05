@@ -6,7 +6,7 @@ use lhf::ssh_russh::{
     RusshLinux,
 };
 use russh::{
-    client::{self, Config, Msg},
+    client::{self, Config, Handle, Msg},
     Channel,
 };
 use russh_keys::key::PublicKey;
@@ -36,12 +36,19 @@ impl TestData {
         let ssh_port = ports
             .map_to_host_port_ipv4(ContainerPort::Tcp(22))
             .expect("Could not get SSH container port corresponding to 22");
-        tokio::time::sleep(Duration::from_millis(100)).await;
 
-        let mut handle = client::connect(Arc::new(Config::default()), ("localhost", ssh_port), TestHandler {})
-            .await
-            .expect("Could not connect");
+        let mut handle_option: Option<Handle<TestHandler>> = None;
+        loop {
+            match client::connect(Arc::new(Config::default()), ("localhost", ssh_port), TestHandler {}).await {
+                Ok(handle) => {
+                    handle_option = Some(handle);
+                    break;
+                }
+                Err(_) => {}
+            }
+        }
 
+        let mut handle = handle_option.unwrap();
         handle
             .authenticate_password("root", "root123")
             .await
