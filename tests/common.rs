@@ -18,6 +18,14 @@ pub fn gen_tmp_path() -> PathBuf {
     PathBuf::from(format!("/tmp/{}", Uuid::new_v4().to_string()))
 }
 
+pub fn gen_nested_tmp_path() -> PathBuf {
+    PathBuf::from(format!(
+        "/tmp/{}/{}",
+        Uuid::new_v4().to_string(),
+        Uuid::new_v4().to_string()
+    ))
+}
+
 pub struct TestData {
     pub ssh: Channel<Msg>,
     pub sftp: SftpSession,

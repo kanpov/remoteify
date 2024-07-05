@@ -1,14 +1,14 @@
 use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::Path};
 
-use common::gen_tmp_path;
+use common::{gen_nested_tmp_path, gen_tmp_path};
 use lhf::{
     filesystem::{LinuxFilesystem, LinuxOpenOptions},
     native::NativeLinux,
 };
 use tokio::{
     fs::{
-        create_dir, metadata, read_to_string, remove_dir, remove_file, symlink, symlink_metadata, try_exists, write,
-        File,
+        create_dir, metadata, read_to_string, remove_dir, remove_dir_all, remove_file, symlink, symlink_metadata,
+        try_exists, write, File,
     },
     io::{AsyncReadExt, AsyncWriteExt},
 };
@@ -193,4 +193,21 @@ async fn remove_file_should_persist_changes() {
     write(&path, "content").await.unwrap();
     IMPL.remove_file(&path).await.expect("Call failed");
     assert!(!try_exists(&path).await.unwrap());
+}
+
+#[tokio::test]
+async fn create_dir_should_persist() {
+    let path = gen_tmp_path();
+    IMPL.create_dir(&path).await.expect("Call failed");
+    assert!(try_exists(&path).await.unwrap());
+    assert!(metadata(&path).await.unwrap().is_dir());
+    remove_dir(&path).await.unwrap();
+}
+
+#[tokio::test]
+async fn create_dir_recursively_should_persist() {
+    let path = gen_nested_tmp_path();
+    IMPL.create_dir_recursively(&path).await.expect("Call failed");
+    assert!(try_exists(&path).await.unwrap());
+    remove_dir_all(&path.parent().unwrap()).await.unwrap();
 }

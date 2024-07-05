@@ -16,6 +16,18 @@ pub struct LinuxOpenOptions {
     create: bool,
 }
 
+impl Default for LinuxOpenOptions {
+    fn default() -> Self {
+        Self {
+            read: false,
+            write: false,
+            append: false,
+            truncate: false,
+            create: false,
+        }
+    }
+}
+
 impl LinuxOpenOptions {
     pub fn new() -> LinuxOpenOptions {
         LinuxOpenOptions {
@@ -100,4 +112,8 @@ pub trait LinuxFilesystem {
     async fn set_permissions(&self, path: &Path, permissions: Permissions) -> io::Result<()>;
 
     async fn remove_file(&self, path: &Path) -> io::Result<()>;
+
+    async fn create_dir(&self, path: &Path) -> io::Result<()>;
+
+    async fn create_dir_recursively(&self, path: &Path) -> io::Result<()>;
 }

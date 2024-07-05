@@ -130,6 +130,50 @@ where
     async fn remove_file(&self, path: &Path) -> io::Result<()> {
         internal_wrap_res(self.sftp_session.remove_file(path_to_str(path)).await)
     }
+
+    async fn create_dir(&self, path: &Path) -> io::Result<()> {
+        internal_wrap_res(self.sftp_session.create_dir(path_to_str(path)).await)
+    }
+
+    async fn create_dir_recursively(&self, path: &Path) -> io::Result<()> {
+        let mut current_path = String::new();
+        let mut previous_existed = false;
+
+        for component in path.components() {
+            match component {
+                std::path::Component::Normal(os_component_value) => {
+                    let component_value = match os_component_value.to_str() {
+                        Some(val) => val,
+                        None => return Err(io::Error::other("could not convert os_str to str")),
+                    };
+
+                    current_path.push_str("/");
+                    current_path.push_str(component_value);
+
+                    if !previous_existed {
+                        let exists = match self.sftp_session.try_exists(&current_path).await {
+                            Ok(exists) => exists,
+                            Err(err) => return Err(io::Error::other(err)),
+                        };
+
+                        if exists {
+                            previous_existed = true;
+                        }
+
+                        continue;
+                    }
+
+                    match self.sftp_session.create_dir(&current_path).await {
+                        Ok(_) => {}
+                        Err(err) => return Err(io::Error::other(err)),
+                    };
+                }
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
 }
 
 async fn internal_run_fs_command<T>(instance: &RusshLinux<T>, command: String) -> io::Result<Option<u32>>
