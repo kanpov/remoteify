@@ -1,6 +1,6 @@
 use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::Path};
 
-use common::{conv_path, entries_contain, gen_nested_tmp_path, gen_tmp_path, TestData};
+use common::{conv_path, conv_path_non_buf, entries_contain, gen_nested_tmp_path, gen_tmp_path, TestData};
 use lhf::filesystem::{LinuxDirEntryType, LinuxFilesystem, LinuxOpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -277,4 +277,19 @@ async fn remove_dir_should_persist() {
     test_data.sftp.create_dir(conv_path(&path)).await.unwrap();
     test_data.implementation.remove_dir(&path).await.expect("Call failed");
     assert!(!test_data.sftp.try_exists(conv_path(&path)).await.unwrap());
+}
+
+#[tokio::test]
+async fn remove_dir_recursively_should_persist() {
+    let test_data = TestData::setup().await;
+    let path = gen_nested_tmp_path();
+    let parent_path = path.parent().unwrap();
+    test_data.sftp.create_dir(conv_path_non_buf(parent_path)).await.unwrap();
+    test_data.sftp.create_dir(conv_path(&path)).await.unwrap();
+    test_data
+        .implementation
+        .remove_dir_recursively(parent_path)
+        .await
+        .expect("Call failed");
+    assert!(!test_data.sftp.try_exists(conv_path_non_buf(parent_path)).await.unwrap());
 }

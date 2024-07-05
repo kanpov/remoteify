@@ -157,4 +157,6 @@ pub trait LinuxFilesystem {
     async fn list_dir(&self, path: &Path) -> io::Result<Vec<LinuxDirEntry>>;
 
     async fn remove_dir(&self, path: &Path) -> io::Result<()>;
+
+    async fn remove_dir_recursively(&self, path: &Path) -> io::Result<()>;
 }

@@ -22,7 +22,7 @@ where
     T: client::Handler,
 {
     async fn exists(&self, path: &Path) -> io::Result<bool> {
-        internal_wrap_res(self.sftp_session.try_exists(conv_path(path)).await)
+        wrap_res(self.sftp_session.try_exists(conv_path(path)).await)
     }
 
     async fn open_file(&self, path: &Path, open_options: &LinuxOpenOptions) -> io::Result<File> {
@@ -43,7 +43,7 @@ where
             flags.insert(OpenFlags::CREATE);
         }
 
-        internal_wrap_res(self.sftp_session.open_with_flags(conv_path(path), flags).await)
+        wrap_res(self.sftp_session.open_with_flags(conv_path(path), flags).await)
     }
 
     async fn create_file(&self, path: &Path) -> io::Result<()> {
@@ -56,11 +56,11 @@ where
     }
 
     async fn rename_file(&self, old_path: &Path, new_path: &Path) -> io::Result<()> {
-        internal_wrap_res(self.sftp_session.rename(conv_path(old_path), conv_path(new_path)).await)
+        wrap_res(self.sftp_session.rename(conv_path(old_path), conv_path(new_path)).await)
     }
 
     async fn copy_file(&self, old_path: &Path, new_path: &Path) -> io::Result<Option<u64>> {
-        let result = internal_run_fs_command(self, format!("cp {} {}", conv_path(old_path), conv_path(new_path))).await;
+        let result = run_fs_command(self, format!("cp {} {}", conv_path(old_path), conv_path(new_path))).await;
         match result {
             Ok(_) => Ok(None),
             Err(err) => Err(err),
@@ -76,7 +76,7 @@ where
     }
 
     async fn symlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
-        internal_wrap_res(
+        wrap_res(
             self.sftp_session
                 .symlink(conv_path(source_path), conv_path(destination_path))
                 .await,
@@ -84,7 +84,7 @@ where
     }
 
     async fn hardlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
-        match internal_run_fs_command(
+        match run_fs_command(
             self,
             format!("ln {} {}", conv_path(source_path), conv_path(destination_path)),
         )
@@ -103,7 +103,7 @@ where
     }
 
     async fn set_permissions(&self, path: &Path, permissions: Permissions) -> io::Result<()> {
-        internal_wrap_res(
+        wrap_res(
             self.sftp_session
                 .set_metadata(
                     conv_path(path),
@@ -123,11 +123,11 @@ where
     }
 
     async fn remove_file(&self, path: &Path) -> io::Result<()> {
-        internal_wrap_res(self.sftp_session.remove_file(conv_path(path)).await)
+        wrap_res(self.sftp_session.remove_file(conv_path(path)).await)
     }
 
     async fn create_dir(&self, path: &Path) -> io::Result<()> {
-        internal_wrap_res(self.sftp_session.create_dir(conv_path(path)).await)
+        wrap_res(self.sftp_session.create_dir(conv_path(path)).await)
     }
 
     async fn create_dir_recursively(&self, path: &Path) -> io::Result<()> {
@@ -189,7 +189,19 @@ where
     }
 
     async fn remove_dir(&self, path: &Path) -> io::Result<()> {
-        internal_wrap_res(self.sftp_session.remove_dir(conv_path(path)).await)
+        wrap_res(self.sftp_session.remove_dir(conv_path(path)).await)
+    }
+
+    async fn remove_dir_recursively(&self, path: &Path) -> io::Result<()> {
+        let str_path = match path.to_str() {
+            Some(str_path) => str_path,
+            None => return Err(io::Error::other("could not convert path to str")),
+        };
+
+        match run_fs_command(self, format!("rm -r {}", str_path)).await {
+            Ok(_) => Ok(()),
+            Err(err) => Err(err),
+        }
     }
 }
 
@@ -204,7 +216,7 @@ impl From<FileType> for LinuxDirEntryType {
     }
 }
 
-async fn internal_run_fs_command<T>(instance: &RusshLinux<T>, command: String) -> io::Result<Option<u32>>
+async fn run_fs_command<T>(instance: &RusshLinux<T>, command: String) -> io::Result<Option<u32>>
 where
     T: client::Handler,
 {
@@ -231,7 +243,7 @@ where
     Ok(code)
 }
 
-fn internal_wrap_res<T>(result: Result<T, russh_sftp::client::error::Error>) -> io::Result<T> {
+fn wrap_res<T>(result: Result<T, russh_sftp::client::error::Error>) -> io::Result<T> {
     match result {
         Ok(val) => Ok(val),
         Err(err) => Err(io::Error::other(err)),

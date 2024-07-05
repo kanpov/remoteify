@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use tokio::fs::{
-    canonicalize, copy, create_dir, create_dir_all, hard_link, read_dir, read_link, remove_dir, remove_file, rename,
-    set_permissions, symlink, try_exists, File, OpenOptions,
+    canonicalize, copy, create_dir, create_dir_all, hard_link, read_dir, read_link, remove_dir, remove_dir_all,
+    remove_file, rename, set_permissions, symlink, try_exists, File, OpenOptions,
 };
 
 use super::NativeLinux;
@@ -131,6 +131,10 @@ impl LinuxFilesystem for NativeLinux {
 
     async fn remove_dir(&self, path: &Path) -> io::Result<()> {
         remove_dir(path).await
+    }
+
+    async fn remove_dir_recursively(&self, path: &Path) -> io::Result<()> {
+        remove_dir_all(path).await
     }
 }
 

@@ -1,4 +1,7 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use lhf::{
@@ -113,6 +116,10 @@ impl TestData {
 }
 
 pub fn conv_path(path: &PathBuf) -> String {
+    path.to_str().unwrap().into()
+}
+
+pub fn conv_path_non_buf(path: &Path) -> String {
     path.to_str().unwrap().into()
 }
 

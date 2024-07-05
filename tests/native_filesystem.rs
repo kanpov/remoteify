@@ -7,8 +7,8 @@ use lhf::{
 };
 use tokio::{
     fs::{
-        create_dir, metadata, read_to_string, remove_dir, remove_dir_all, remove_file, symlink, symlink_metadata,
-        try_exists, write, File,
+        create_dir, create_dir_all, metadata, read_to_string, remove_dir, remove_dir_all, remove_file, symlink,
+        symlink_metadata, try_exists, write, File,
     },
     io::{AsyncReadExt, AsyncWriteExt},
 };
@@ -234,4 +234,13 @@ async fn remove_dir_should_persist() {
     create_dir(&path).await.unwrap();
     IMPL.remove_dir(&path).await.expect("Call failed");
     assert!(!try_exists(&path).await.unwrap());
+}
+
+#[tokio::test]
+async fn remove_dir_recursively_should_persist() {
+    let path = gen_nested_tmp_path();
+    let parent_path = path.parent().unwrap();
+    create_dir_all(&path).await.unwrap();
+    IMPL.remove_dir_recursively(&parent_path).await.expect("Call failed");
+    assert!(!try_exists(&parent_path).await.unwrap());
 }
