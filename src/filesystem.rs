@@ -7,13 +7,50 @@ use std::{
 use async_trait::async_trait;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct LinuxOpenOptions {
     read: bool,
     write: bool,
     append: bool,
     truncate: bool,
     create: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct LinuxDirEntry {
+    entry_name: String,
+    entry_type: LinuxDirEntryType,
+    entry_path: PathBuf,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum LinuxDirEntryType {
+    File,
+    Dir,
+    Symlink,
+    Other,
+}
+
+impl LinuxDirEntry {
+    pub(crate) fn new(entry_name: String, entry_type: LinuxDirEntryType, entry_path: PathBuf) -> LinuxDirEntry {
+        LinuxDirEntry {
+            entry_name,
+            entry_type,
+            entry_path,
+        }
+    }
+
+    pub fn entry_name(&self) -> String {
+        self.entry_name.clone()
+    }
+
+    pub fn entry_type(&self) -> LinuxDirEntryType {
+        self.entry_type
+    }
+
+    pub fn entry_path(&self) -> PathBuf {
+        self.entry_path.clone()
+    }
 }
 
 impl Default for LinuxOpenOptions {
@@ -116,4 +153,6 @@ pub trait LinuxFilesystem {
     async fn create_dir(&self, path: &Path) -> io::Result<()>;
 
     async fn create_dir_recursively(&self, path: &Path) -> io::Result<()>;
+
+    async fn list_dir(&self, path: &Path) -> io::Result<Vec<LinuxDirEntry>>;
 }

@@ -1,9 +1,12 @@
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{path::PathBuf, sync::Arc};
 
 use async_trait::async_trait;
-use lhf::ssh_russh::{
-    connection::{RusshAuthentication, RusshConnectionOptions},
-    RusshLinux,
+use lhf::{
+    filesystem::{LinuxDirEntry, LinuxDirEntryType},
+    ssh_russh::{
+        connection::{RusshAuthentication, RusshConnectionOptions},
+        RusshLinux,
+    },
 };
 use russh::{
     client::{self, Config, Handle, Msg},
@@ -111,6 +114,14 @@ impl TestData {
 
 pub fn conv_path(path: &PathBuf) -> String {
     path.to_str().unwrap().into()
+}
+
+pub fn entries_contain(entries: &Vec<LinuxDirEntry>, expected_type: LinuxDirEntryType, expected_path: &PathBuf) {
+    assert!(entries.iter().any(|entry| {
+        matches!(entry.entry_type(), expected_type)
+            && entry.entry_path().as_os_str() == expected_path.as_os_str()
+            && entry.entry_name().as_str() == expected_path.file_name().unwrap()
+    }))
 }
 
 #[derive(Debug)]

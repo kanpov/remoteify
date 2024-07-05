@@ -1,8 +1,8 @@
 use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::Path};
 
-use common::{gen_nested_tmp_path, gen_tmp_path};
+use common::{entries_contain, gen_nested_tmp_path, gen_tmp_path};
 use lhf::{
-    filesystem::{LinuxFilesystem, LinuxOpenOptions},
+    filesystem::{LinuxDirEntryType, LinuxFilesystem, LinuxOpenOptions},
     native::NativeLinux,
 };
 use tokio::{
@@ -210,4 +210,20 @@ async fn create_dir_recursively_should_persist() {
     IMPL.create_dir_recursively(&path).await.expect("Call failed");
     assert!(try_exists(&path).await.unwrap());
     remove_dir_all(&path.parent().unwrap()).await.unwrap();
+}
+
+#[tokio::test]
+async fn list_dir_returns_correct_results() {
+    let file_path = gen_tmp_path();
+    write(&file_path, "content").await.unwrap();
+    let dir_path = gen_tmp_path();
+    create_dir(&dir_path).await.unwrap();
+    let symlink_path = gen_tmp_path();
+    symlink(&file_path, &symlink_path).await.unwrap();
+
+    let entries = IMPL.list_dir(Path::new("/tmp")).await.expect("Call failed");
+
+    entries_contain(&entries, LinuxDirEntryType::File, &file_path);
+    entries_contain(&entries, LinuxDirEntryType::Dir, &dir_path);
+    entries_contain(&entries, LinuxDirEntryType::Symlink, &symlink_path);
 }

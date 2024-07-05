@@ -1,8 +1,11 @@
 use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::Path};
 
-use common::{conv_path, gen_nested_tmp_path, gen_tmp_path, TestData};
-use lhf::filesystem::{LinuxFilesystem, LinuxOpenOptions};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use common::{conv_path, entries_contain, gen_nested_tmp_path, gen_tmp_path, TestData};
+use lhf::filesystem::{LinuxDirEntryType, LinuxFilesystem, LinuxOpenOptions};
+use tokio::{
+    fs::remove_file,
+    io::{AsyncReadExt, AsyncWriteExt},
+};
 
 mod common;
 
@@ -244,4 +247,28 @@ async fn create_dir_recursively_should_persist() {
         .await
         .expect("Call failed");
     assert!(test_data.sftp.try_exists(conv_path(&path)).await.unwrap());
+}
+
+#[tokio::test]
+async fn list_dir_returns_correct_results() {
+    let test_data = TestData::setup().await;
+    let file_path = test_data.init_file("content").await;
+    let dir_path = gen_tmp_path();
+    test_data.sftp.create_dir(conv_path(&dir_path)).await.unwrap();
+    let symlink_path = gen_tmp_path();
+    test_data
+        .sftp
+        .symlink(conv_path(&file_path), conv_path(&symlink_path))
+        .await
+        .unwrap();
+
+    let entries = test_data
+        .implementation
+        .list_dir(Path::new("/tmp"))
+        .await
+        .expect("Call failed");
+
+    entries_contain(&entries, LinuxDirEntryType::File, &file_path);
+    entries_contain(&entries, LinuxDirEntryType::Dir, &dir_path);
+    entries_contain(&entries, LinuxDirEntryType::Symlink, &symlink_path);
 }

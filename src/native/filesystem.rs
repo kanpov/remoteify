@@ -1,13 +1,13 @@
 use async_trait::async_trait;
 use tokio::fs::{
-    canonicalize, copy, create_dir, create_dir_all, hard_link, read_link, remove_file, rename, set_permissions,
-    symlink, try_exists, File, OpenOptions,
+    canonicalize, copy, create_dir, create_dir_all, hard_link, read_dir, read_link, remove_file, rename,
+    set_permissions, symlink, try_exists, File, OpenOptions,
 };
 
 use super::NativeLinux;
-use crate::filesystem::{LinuxFilesystem, LinuxOpenOptions};
+use crate::filesystem::{LinuxDirEntry, LinuxDirEntryType, LinuxFilesystem, LinuxOpenOptions};
 use std::{
-    fs::Permissions,
+    fs::{FileType, Permissions},
     io,
     path::{Path, PathBuf},
 };
@@ -89,5 +89,59 @@ impl LinuxFilesystem for NativeLinux {
 
     async fn create_dir_recursively(&self, path: &Path) -> io::Result<()> {
         create_dir_all(path).await
+    }
+
+    async fn list_dir(&self, path: &Path) -> io::Result<Vec<LinuxDirEntry>> {
+        let mut read_dir = match read_dir(path).await {
+            Ok(read_dir) => read_dir,
+            Err(err) => return Err(err),
+        };
+
+        let mut entries: Vec<LinuxDirEntry> = vec![];
+        loop {
+            let entry = match read_dir.next_entry().await {
+                Ok(entry) => entry,
+                Err(err) => return Err(err),
+            };
+
+            match entry {
+                Some(entry_value) => {
+                    let entry_name = match entry_value.file_name().into_string() {
+                        Ok(entry_name) => entry_name,
+                        Err(_) => return Err(io::Error::other("could not convert os_str into str")),
+                    };
+
+                    let entry_type = match entry_value.file_type().await {
+                        Ok(entry_type) => entry_type.into(),
+                        Err(err) => return Err(io::Error::other(err)),
+                    };
+
+                    let entry_path = entry_value.path();
+
+                    entries.push(LinuxDirEntry::new(entry_name, entry_type, entry_path));
+                }
+                None => {
+                    break;
+                }
+            }
+        }
+
+        Ok(entries)
+    }
+}
+
+impl From<FileType> for LinuxDirEntryType {
+    fn from(value: FileType) -> Self {
+        if value.is_file() {
+            return LinuxDirEntryType::File;
+        }
+        if value.is_dir() {
+            return LinuxDirEntryType::Dir;
+        }
+        if value.is_symlink() {
+            return LinuxDirEntryType::Symlink;
+        }
+
+        LinuxDirEntryType::Other
     }
 }
