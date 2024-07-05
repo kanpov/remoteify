@@ -227,3 +227,11 @@ async fn list_dir_returns_correct_results() {
     entries_contain(&entries, LinuxDirEntryType::Dir, &dir_path);
     entries_contain(&entries, LinuxDirEntryType::Symlink, &symlink_path);
 }
+
+#[tokio::test]
+async fn remove_dir_should_persist() {
+    let path = gen_tmp_path();
+    create_dir(&path).await.unwrap();
+    IMPL.remove_dir(&path).await.expect("Call failed");
+    assert!(!try_exists(&path).await.unwrap());
+}

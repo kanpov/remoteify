@@ -187,6 +187,10 @@ where
 
         Ok(entries)
     }
+
+    async fn remove_dir(&self, path: &Path) -> io::Result<()> {
+        internal_wrap_res(self.sftp_session.remove_dir(conv_path(path)).await)
+    }
 }
 
 impl From<FileType> for LinuxDirEntryType {
