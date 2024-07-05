@@ -1,7 +1,7 @@
 use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::Path};
 
 use common::{conv_path, conv_path_non_buf, entries_contain, gen_nested_tmp_path, gen_tmp_path, TestData};
-use lhf::filesystem::{LinuxDirEntryType, LinuxFilesystem, LinuxOpenOptions};
+use lhf::filesystem::{LinuxFileType, LinuxFilesystem, LinuxOpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 mod common;
@@ -265,9 +265,9 @@ async fn list_dir_returns_correct_results() {
         .await
         .expect("Call failed");
 
-    entries_contain(&entries, LinuxDirEntryType::File, &file_path);
-    entries_contain(&entries, LinuxDirEntryType::Dir, &dir_path);
-    entries_contain(&entries, LinuxDirEntryType::Symlink, &symlink_path);
+    entries_contain(&entries, LinuxFileType::File, &file_path);
+    entries_contain(&entries, LinuxFileType::Dir, &dir_path);
+    entries_contain(&entries, LinuxFileType::Symlink, &symlink_path);
 }
 
 #[tokio::test]

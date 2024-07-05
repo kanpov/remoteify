@@ -2,6 +2,7 @@ use std::{
     fs::Permissions,
     io,
     path::{Path, PathBuf},
+    time::SystemTime,
 };
 
 use async_trait::async_trait;
@@ -18,13 +19,27 @@ pub struct LinuxOpenOptions {
 
 #[derive(Clone, Debug)]
 pub struct LinuxDirEntry {
-    entry_name: String,
-    entry_type: LinuxDirEntryType,
-    entry_path: PathBuf,
+    name: String,
+    file_type: LinuxFileType,
+    path: PathBuf,
+}
+
+#[derive(Clone, Debug)]
+pub struct LinuxFileMetadata {
+    file_type: Option<LinuxFileType>,
+    size: Option<u64>,
+    permissions: Option<Permissions>,
+    modified_time: Option<SystemTime>,
+    accessed_time: Option<SystemTime>,
+    created_time: Option<SystemTime>,
+    user_id: Option<u32>,
+    user_name: Option<String>,
+    group_id: Option<u32>,
+    group_name: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum LinuxDirEntryType {
+pub enum LinuxFileType {
     File,
     Dir,
     Symlink,
@@ -32,24 +47,24 @@ pub enum LinuxDirEntryType {
 }
 
 impl LinuxDirEntry {
-    pub(crate) fn new(entry_name: String, entry_type: LinuxDirEntryType, entry_path: PathBuf) -> LinuxDirEntry {
+    pub(crate) fn new(entry_name: String, entry_type: LinuxFileType, entry_path: PathBuf) -> LinuxDirEntry {
         LinuxDirEntry {
-            entry_name,
-            entry_type,
-            entry_path,
+            name: entry_name,
+            file_type: entry_type,
+            path: entry_path,
         }
     }
 
-    pub fn entry_name(&self) -> String {
-        self.entry_name.clone()
+    pub fn name(&self) -> String {
+        self.name.clone()
     }
 
-    pub fn entry_type(&self) -> LinuxDirEntryType {
-        self.entry_type
+    pub fn file_type(&self) -> LinuxFileType {
+        self.file_type
     }
 
-    pub fn entry_path(&self) -> PathBuf {
-        self.entry_path.clone()
+    pub fn path(&self) -> PathBuf {
+        self.path.clone()
     }
 }
 
@@ -122,6 +137,74 @@ impl LinuxOpenOptions {
     }
 }
 
+impl LinuxFileMetadata {
+    pub(crate) fn new(
+        file_type: Option<LinuxFileType>,
+        size: Option<u64>,
+        permissions: Option<Permissions>,
+        modified_time: Option<SystemTime>,
+        accessed_time: Option<SystemTime>,
+        created_time: Option<SystemTime>,
+        user_id: Option<u32>,
+        user_name: Option<String>,
+        group_id: Option<u32>,
+        group_name: Option<String>,
+    ) -> LinuxFileMetadata {
+        LinuxFileMetadata {
+            file_type,
+            size,
+            permissions,
+            modified_time,
+            accessed_time,
+            created_time,
+            user_id,
+            user_name,
+            group_id,
+            group_name,
+        }
+    }
+
+    pub fn file_type(&self) -> Option<LinuxFileType> {
+        self.file_type
+    }
+
+    pub fn size(&self) -> Option<u64> {
+        self.size
+    }
+
+    pub fn permissions(&self) -> Option<Permissions> {
+        self.permissions.clone()
+    }
+
+    pub fn modified_time(&self) -> Option<SystemTime> {
+        self.modified_time
+    }
+
+    pub fn accessed_time(&self) -> Option<SystemTime> {
+        self.accessed_time
+    }
+
+    pub fn created_time(&self) -> Option<SystemTime> {
+        self.created_time
+    }
+
+    pub fn user_id(&self) -> Option<u32> {
+        self.user_id
+    }
+
+    pub fn user_name(&self) -> Option<String> {
+        self.user_name.clone()
+    }
+
+    pub fn group_id(&self) -> Option<u32> {
+        self.group_id
+    }
+
+    pub fn group_name(&self) -> Option<String> {
+        self.group_name.clone()
+    }
+}
+
 #[async_trait]
 pub trait LinuxFilesystem {
     async fn exists(&self, path: &Path) -> io::Result<bool>;
@@ -159,4 +242,6 @@ pub trait LinuxFilesystem {
     async fn remove_dir(&self, path: &Path) -> io::Result<()>;
 
     async fn remove_dir_recursively(&self, path: &Path) -> io::Result<()>;
+
+    async fn get_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata>;
 }

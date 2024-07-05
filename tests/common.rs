@@ -5,7 +5,7 @@ use std::{
 
 use async_trait::async_trait;
 use lhf::{
-    filesystem::{LinuxDirEntry, LinuxDirEntryType},
+    filesystem::{LinuxDirEntry, LinuxFileType},
     ssh_russh::{
         connection::{RusshAuthentication, RusshConnectionOptions},
         RusshLinux,
@@ -123,11 +123,11 @@ pub fn conv_path_non_buf(path: &Path) -> String {
     path.to_str().unwrap().into()
 }
 
-pub fn entries_contain(entries: &Vec<LinuxDirEntry>, expected_type: LinuxDirEntryType, expected_path: &PathBuf) {
+pub fn entries_contain(entries: &Vec<LinuxDirEntry>, expected_type: LinuxFileType, expected_path: &PathBuf) {
     assert!(entries.iter().any(|entry| {
-        matches!(entry.entry_type(), expected_type)
-            && entry.entry_path().as_os_str() == expected_path.as_os_str()
-            && entry.entry_name().as_str() == expected_path.file_name().unwrap()
+        matches!(entry.file_type(), expected_type)
+            && entry.path().as_os_str() == expected_path.as_os_str()
+            && entry.name().as_str() == expected_path.file_name().unwrap()
     }))
 }
 

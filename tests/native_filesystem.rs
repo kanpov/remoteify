@@ -2,7 +2,7 @@ use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::Path};
 
 use common::{entries_contain, gen_nested_tmp_path, gen_tmp_path};
 use lhf::{
-    filesystem::{LinuxDirEntryType, LinuxFilesystem, LinuxOpenOptions},
+    filesystem::{LinuxFileType, LinuxFilesystem, LinuxOpenOptions},
     native::NativeLinux,
 };
 use tokio::{
@@ -223,9 +223,9 @@ async fn list_dir_returns_correct_results() {
 
     let entries = IMPL.list_dir(Path::new("/tmp")).await.expect("Call failed");
 
-    entries_contain(&entries, LinuxDirEntryType::File, &file_path);
-    entries_contain(&entries, LinuxDirEntryType::Dir, &dir_path);
-    entries_contain(&entries, LinuxDirEntryType::Symlink, &symlink_path);
+    entries_contain(&entries, LinuxFileType::File, &file_path);
+    entries_contain(&entries, LinuxFileType::Dir, &dir_path);
+    entries_contain(&entries, LinuxFileType::Symlink, &symlink_path);
 }
 
 #[tokio::test]
@@ -243,4 +243,10 @@ async fn remove_dir_recursively_should_persist() {
     create_dir_all(&path).await.unwrap();
     IMPL.remove_dir_recursively(&parent_path).await.expect("Call failed");
     assert!(!try_exists(&parent_path).await.unwrap());
+}
+
+#[tokio::test]
+async fn t() {
+    let m = IMPL.get_metadata(Path::new("/tmp")).await.unwrap();
+    dbg!(m);
 }

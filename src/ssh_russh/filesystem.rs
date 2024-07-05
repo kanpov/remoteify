@@ -12,7 +12,7 @@ use russh_sftp::{
 };
 use std::io::{self};
 
-use crate::filesystem::{LinuxDirEntry, LinuxDirEntryType, LinuxFilesystem, LinuxOpenOptions};
+use crate::filesystem::{LinuxDirEntry, LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions};
 
 use super::RusshLinux;
 
@@ -203,15 +203,38 @@ where
             Err(err) => Err(err),
         }
     }
+
+    async fn get_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata> {
+        let fetched_metadata = match self.sftp_session.metadata(conv_path(path)).await {
+            Ok(fetched_metadata) => fetched_metadata,
+            Err(err) => return Err(io::Error::other(err)),
+        };
+
+        Ok(LinuxFileMetadata::new(
+            Some(fetched_metadata.file_type().into()),
+            fetched_metadata.size,
+            match fetched_metadata.permissions {
+                Some(bit) => Some(Permissions::from_mode(bit)),
+                None => None,
+            },
+            fetched_metadata.modified().ok(),
+            fetched_metadata.accessed().ok(),
+            None,
+            fetched_metadata.uid,
+            fetched_metadata.user,
+            fetched_metadata.gid,
+            fetched_metadata.group,
+        ))
+    }
 }
 
-impl From<FileType> for LinuxDirEntryType {
+impl From<FileType> for LinuxFileType {
     fn from(value: FileType) -> Self {
         match value {
-            FileType::Dir => LinuxDirEntryType::Dir,
-            FileType::File => LinuxDirEntryType::File,
-            FileType::Symlink => LinuxDirEntryType::Symlink,
-            FileType::Other => LinuxDirEntryType::Other,
+            FileType::Dir => LinuxFileType::Dir,
+            FileType::File => LinuxFileType::File,
+            FileType::Symlink => LinuxFileType::Symlink,
+            FileType::Other => LinuxFileType::Other,
         }
     }
 }

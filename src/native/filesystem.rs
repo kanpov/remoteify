@@ -1,14 +1,15 @@
 use async_trait::async_trait;
 use tokio::fs::{
-    canonicalize, copy, create_dir, create_dir_all, hard_link, read_dir, read_link, remove_dir, remove_dir_all,
-    remove_file, rename, set_permissions, symlink, try_exists, File, OpenOptions,
+    canonicalize, copy, create_dir, create_dir_all, hard_link, metadata, read_dir, read_link, remove_dir,
+    remove_dir_all, remove_file, rename, set_permissions, symlink, try_exists, File, OpenOptions,
 };
 
 use super::NativeLinux;
-use crate::filesystem::{LinuxDirEntry, LinuxDirEntryType, LinuxFilesystem, LinuxOpenOptions};
+use crate::filesystem::{LinuxDirEntry, LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions};
 use std::{
     fs::{FileType, Permissions},
     io,
+    os::unix::fs::MetadataExt,
     path::{Path, PathBuf},
 };
 
@@ -92,10 +93,7 @@ impl LinuxFilesystem for NativeLinux {
     }
 
     async fn list_dir(&self, path: &Path) -> io::Result<Vec<LinuxDirEntry>> {
-        let mut read_dir = match read_dir(path).await {
-            Ok(read_dir) => read_dir,
-            Err(err) => return Err(err),
-        };
+        let mut read_dir = read_dir(path).await?;
 
         let mut entries: Vec<LinuxDirEntry> = vec![];
         loop {
@@ -111,14 +109,14 @@ impl LinuxFilesystem for NativeLinux {
                         Err(_) => return Err(io::Error::other("could not convert os_str into str")),
                     };
 
-                    let entry_type = match entry_value.file_type().await {
+                    let file_type = match entry_value.file_type().await {
                         Ok(entry_type) => entry_type.into(),
                         Err(err) => return Err(io::Error::other(err)),
                     };
 
                     let entry_path = entry_value.path();
 
-                    entries.push(LinuxDirEntry::new(entry_name, entry_type, entry_path));
+                    entries.push(LinuxDirEntry::new(entry_name, file_type, entry_path));
                 }
                 None => {
                     break;
@@ -136,20 +134,36 @@ impl LinuxFilesystem for NativeLinux {
     async fn remove_dir_recursively(&self, path: &Path) -> io::Result<()> {
         remove_dir_all(path).await
     }
+
+    async fn get_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata> {
+        let fetched_metadata = metadata(path).await?;
+        Ok(LinuxFileMetadata::new(
+            Some(fetched_metadata.file_type().into()),
+            Some(fetched_metadata.size()),
+            Some(fetched_metadata.permissions()),
+            fetched_metadata.modified().ok(),
+            fetched_metadata.accessed().ok(),
+            fetched_metadata.created().ok(),
+            Some(fetched_metadata.uid()),
+            None,
+            Some(fetched_metadata.gid()),
+            None,
+        ))
+    }
 }
 
-impl From<FileType> for LinuxDirEntryType {
+impl From<FileType> for LinuxFileType {
     fn from(value: FileType) -> Self {
         if value.is_file() {
-            return LinuxDirEntryType::File;
+            return LinuxFileType::File;
         }
         if value.is_dir() {
-            return LinuxDirEntryType::Dir;
+            return LinuxFileType::Dir;
         }
         if value.is_symlink() {
-            return LinuxDirEntryType::Symlink;
+            return LinuxFileType::Symlink;
         }
 
-        LinuxDirEntryType::Other
+        LinuxFileType::Other
     }
 }
