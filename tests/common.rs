@@ -39,7 +39,7 @@ impl TestData {
         let ssh_port = ports
             .map_to_host_port_ipv4(ContainerPort::Tcp(22))
             .expect("Could not get SSH container port corresponding to 22");
-        tokio::time::sleep(Duration::from_millis(30)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
 
         let mut handle = client::connect(
             Arc::new(Config::default()),
@@ -90,6 +90,26 @@ impl TestData {
             _container: container,
         }
     }
+
+    pub async fn init_file(&self, content: &str) -> PathBuf {
+        let path = get_tmp_path();
+        self.sftp.create(conv_path(&path)).await.unwrap();
+        self.sftp
+            .write(conv_path(&path), content.as_bytes())
+            .await
+            .unwrap();
+        path
+    }
+
+    pub async fn assert_file(&self, path: &PathBuf, expected_content: &str) {
+        let actual_content =
+            String::from_utf8(self.sftp.read(conv_path(&path)).await.unwrap()).unwrap();
+        assert_eq!(actual_content, expected_content);
+    }
+}
+
+pub fn conv_path(path: &PathBuf) -> String {
+    path.to_str().unwrap().into()
 }
 
 #[derive(Debug)]
