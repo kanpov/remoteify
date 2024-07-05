@@ -55,32 +55,17 @@ where
         };
 
         match connection_options.authentication {
-            RusshAuthentication::Password { password } => {
-                let error = map_to_error(
-                    handle
-                        .authenticate_password(connection_options.username, password)
-                        .await,
-                );
-                if error.is_some() {
-                    return Err(error.unwrap());
-                }
-            }
-            RusshAuthentication::PublicKey { key_pair } => {
-                let error = map_to_error(
-                    handle
-                        .authenticate_publickey(connection_options.username, Arc::new(key_pair))
-                        .await,
-                );
-                if error.is_some() {
-                    return Err(error.unwrap());
-                }
-            }
-            RusshAuthentication::None => {
-                let error = map_to_error(handle.authenticate_none(connection_options.username).await);
-                if error.is_some() {
-                    return Err(error.unwrap());
-                }
-            }
+            RusshAuthentication::Password { password } => map_to_error(
+                handle
+                    .authenticate_password(connection_options.username, password)
+                    .await,
+            )?,
+            RusshAuthentication::PublicKey { key_pair } => map_to_error(
+                handle
+                    .authenticate_publickey(connection_options.username, Arc::new(key_pair))
+                    .await,
+            )?,
+            RusshAuthentication::None => map_to_error(handle.authenticate_none(connection_options.username).await)?,
         }
 
         let sftp_channel = match handle.channel_open_session().await {
@@ -111,14 +96,14 @@ where
     }
 }
 
-fn map_to_error<T>(result: Result<bool, russh::Error>) -> Option<RusshConnectionError<T>>
+fn map_to_error<T>(result: Result<bool, russh::Error>) -> Result<(), RusshConnectionError<T>>
 where
     T: client::Handler,
 {
     if result.is_err() {
-        return Some(RusshConnectionError::AuthenticationError(result.unwrap_err()));
+        return Err(RusshConnectionError::AuthenticationError(result.unwrap_err()));
     }
-    None
+    Ok(())
 }
 
 #[derive(Debug)]
