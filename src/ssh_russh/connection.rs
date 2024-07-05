@@ -76,8 +76,7 @@ where
                 }
             }
             RusshAuthentication::None => {
-                let error =
-                    map_to_error(handle.authenticate_none(connection_options.username).await);
+                let error = map_to_error(handle.authenticate_none(connection_options.username).await);
                 if error.is_some() {
                     return Err(error.unwrap());
                 }
@@ -117,9 +116,7 @@ where
     T: client::Handler,
 {
     if result.is_err() {
-        return Some(RusshConnectionError::AuthenticationError(
-            result.unwrap_err(),
-        ));
+        return Some(RusshConnectionError::AuthenticationError(result.unwrap_err()));
     }
     None
 }
@@ -131,10 +128,7 @@ pub struct TrustingHandler {}
 impl client::Handler for TrustingHandler {
     type Error = russh::Error;
 
-    async fn check_server_key(
-        &mut self,
-        _server_public_key: &PublicKey,
-    ) -> Result<bool, Self::Error> {
+    async fn check_server_key(&mut self, _server_public_key: &PublicKey) -> Result<bool, Self::Error> {
         Ok(true)
     }
 }

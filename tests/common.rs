@@ -14,7 +14,7 @@ use russh_sftp::client::SftpSession;
 use testcontainers::{core::ContainerPort, runners::AsyncRunner, ContainerAsync, GenericImage};
 use uuid::Uuid;
 
-pub fn get_tmp_path() -> PathBuf {
+pub fn gen_tmp_path() -> PathBuf {
     PathBuf::from(format!("/tmp/{}", Uuid::new_v4().to_string()))
 }
 
@@ -32,31 +32,21 @@ impl TestData {
             .start()
             .await
             .expect("Could not start SSH container");
-        let ports = container
-            .ports()
-            .await
-            .expect("Could not get SSH container ports");
+        let ports = container.ports().await.expect("Could not get SSH container ports");
         let ssh_port = ports
             .map_to_host_port_ipv4(ContainerPort::Tcp(22))
             .expect("Could not get SSH container port corresponding to 22");
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        let mut handle = client::connect(
-            Arc::new(Config::default()),
-            ("localhost", ssh_port),
-            TestHandler {},
-        )
-        .await
-        .expect("Could not connect");
+        let mut handle = client::connect(Arc::new(Config::default()), ("localhost", ssh_port), TestHandler {})
+            .await
+            .expect("Could not connect");
 
         handle
             .authenticate_password("root", "root123")
             .await
             .expect("Could not auth");
-        let ssh_chan = handle
-            .channel_open_session()
-            .await
-            .expect("Could not open SSH channel");
+        let ssh_chan = handle.channel_open_session().await.expect("Could not open SSH channel");
         let sftp_chan = handle
             .channel_open_session()
             .await
@@ -92,18 +82,14 @@ impl TestData {
     }
 
     pub async fn init_file(&self, content: &str) -> PathBuf {
-        let path = get_tmp_path();
+        let path = gen_tmp_path();
         self.sftp.create(conv_path(&path)).await.unwrap();
-        self.sftp
-            .write(conv_path(&path), content.as_bytes())
-            .await
-            .unwrap();
+        self.sftp.write(conv_path(&path), content.as_bytes()).await.unwrap();
         path
     }
 
     pub async fn assert_file(&self, path: &PathBuf, expected_content: &str) {
-        let actual_content =
-            String::from_utf8(self.sftp.read(conv_path(&path)).await.unwrap()).unwrap();
+        let actual_content = String::from_utf8(self.sftp.read(conv_path(&path)).await.unwrap()).unwrap();
         assert_eq!(actual_content, expected_content);
     }
 }
@@ -119,10 +105,7 @@ pub struct TestHandler {}
 impl client::Handler for TestHandler {
     type Error = russh::Error;
 
-    async fn check_server_key(
-        &mut self,
-        _server_public_key: &PublicKey,
-    ) -> Result<bool, Self::Error> {
+    async fn check_server_key(&mut self, _server_public_key: &PublicKey) -> Result<bool, Self::Error> {
         Ok(true)
     }
 }

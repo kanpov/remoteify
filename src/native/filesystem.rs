@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 use tokio::fs::{
-    canonicalize, copy, hard_link, read_link, rename, set_permissions, symlink, try_exists, File,
-    OpenOptions,
+    canonicalize, copy, hard_link, read_link, rename, set_permissions, symlink, try_exists, File, OpenOptions,
 };
 
 use super::NativeLinux;

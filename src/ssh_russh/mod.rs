@@ -39,14 +39,9 @@ mod tests {
                 password: "root123".into(),
             },
         };
-        let ssh_linux = RusshLinux::connect(TrustingHandler {}, conn_opt)
-            .await
-            .unwrap();
+        let ssh_linux = RusshLinux::connect(TrustingHandler {}, conn_opt).await.unwrap();
 
-        let loc = ssh_linux
-            .read_link(Path::new("/tmp/link.txt"))
-            .await
-            .unwrap();
+        let loc = ssh_linux.read_link(Path::new("/tmp/link.txt")).await.unwrap();
         dbg!(loc);
 
         ssh_linux

@@ -43,11 +43,7 @@ where
             flags.insert(OpenFlags::CREATE);
         }
 
-        internal_wrap_res(
-            self.sftp_session
-                .open_with_flags(path_to_str(path), flags)
-                .await,
-        )
+        internal_wrap_res(self.sftp_session.open_with_flags(path_to_str(path), flags).await)
     }
 
     async fn create_file(&self, path: &Path) -> io::Result<()> {
@@ -68,11 +64,8 @@ where
     }
 
     async fn copy_file(&self, old_path: &Path, new_path: &Path) -> io::Result<Option<u64>> {
-        let result = internal_run_fs_command(
-            self,
-            format!("cp {} {}", path_to_str(old_path), path_to_str(new_path)),
-        )
-        .await;
+        let result =
+            internal_run_fs_command(self, format!("cp {} {}", path_to_str(old_path), path_to_str(new_path))).await;
         match result {
             Ok(_) => Ok(None),
             Err(err) => Err(err),
@@ -98,11 +91,7 @@ where
     async fn hardlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
         match internal_run_fs_command(
             self,
-            format!(
-                "ln {} {}",
-                path_to_str(source_path),
-                path_to_str(destination_path)
-            ),
+            format!("ln {} {}", path_to_str(source_path), path_to_str(destination_path)),
         )
         .await
         {
@@ -139,10 +128,7 @@ where
     }
 }
 
-async fn internal_run_fs_command<T>(
-    instance: &RusshLinux<T>,
-    command: String,
-) -> io::Result<Option<u32>>
+async fn internal_run_fs_command<T>(instance: &RusshLinux<T>, command: String) -> io::Result<Option<u32>>
 where
     T: client::Handler,
 {
