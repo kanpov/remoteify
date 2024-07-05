@@ -5,7 +5,7 @@ use tokio::fs::{
 };
 
 use super::NativeLinux;
-use crate::filesystem::LinuxFilesystem;
+use crate::filesystem::{LinuxFilesystem, LinuxOpenOptions};
 use std::{
     fs::Permissions,
     io,
@@ -18,24 +18,25 @@ impl LinuxFilesystem for NativeLinux {
         try_exists(&path).await
     }
 
-    async fn file_open_write(&self, path: &Path, truncate: bool) -> io::Result<File> {
-        internal_open_file(path, OpenOptions::new().write(true), truncate).await
-    }
+    async fn open_file(&self, path: &Path, open_options: &LinuxOpenOptions) -> io::Result<File> {
+        let mut final_options = OpenOptions::new();
+        if open_options.is_read() {
+            final_options.read(true);
+        }
+        if open_options.is_write() {
+            final_options.write(true);
+        }
+        if open_options.is_append() {
+            final_options.append(true);
+        }
+        if open_options.is_truncate() {
+            final_options.truncate(true);
+        }
+        if open_options.is_create() {
+            final_options.create(true);
+        }
 
-    async fn file_open_append(&self, path: &Path) -> io::Result<File> {
-        internal_open_file(path, OpenOptions::new().append(true), false).await
-    }
-
-    async fn file_open_read(&self, path: &Path) -> io::Result<File> {
-        internal_open_file(path, OpenOptions::new().read(true), false).await
-    }
-
-    async fn file_open_read_write(&self, path: &Path, truncate: bool) -> io::Result<File> {
-        internal_open_file(path, OpenOptions::new().read(true).write(true), truncate).await
-    }
-
-    async fn file_open_read_append(&self, path: &Path) -> io::Result<File> {
-        internal_open_file(path, OpenOptions::new().read(true).append(true), false).await
+        final_options.open(path).await
     }
 
     async fn create_file(&self, path: &Path) -> io::Result<()> {
@@ -76,17 +77,5 @@ impl LinuxFilesystem for NativeLinux {
 
     async fn set_permissions(&self, path: &Path, permissions: Permissions) -> io::Result<()> {
         set_permissions(path, permissions).await
-    }
-}
-
-async fn internal_open_file(
-    path: &Path,
-    open_options: &mut OpenOptions,
-    truncate: bool,
-) -> io::Result<File> {
-    if truncate {
-        open_options.truncate(true).open(path).await
-    } else {
-        open_options.open(path).await
     }
 }

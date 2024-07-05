@@ -11,7 +11,7 @@ where
     T: client::Handler,
     T: 'static,
 {
-    handle: Arc<client::Handle<T>>,
+    _handle: Arc<client::Handle<T>>,
     ssh_channel: Arc<Mutex<russh::Channel<Msg>>>,
     sftp_session: Arc<russh_sftp::client::SftpSession>,
 }

@@ -2,21 +2,17 @@ use std::{
     fs::Permissions,
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
 use async_trait::async_trait;
 use russh::{client, ChannelMsg};
 use russh_sftp::{
-    client::{
-        fs::{File, Metadata},
-        SftpSession,
-    },
+    client::fs::{File, Metadata},
     protocol::OpenFlags,
 };
 use std::io::{self};
 
-use crate::filesystem::LinuxFilesystem;
+use crate::filesystem::{LinuxFilesystem, LinuxOpenOptions};
 
 use super::RusshLinux;
 
@@ -29,42 +25,29 @@ where
         internal_wrap_res(self.sftp_session.try_exists(path_to_str(path)).await)
     }
 
-    async fn file_open_write(&self, path: &Path, truncate: bool) -> io::Result<File> {
-        internal_open_file(&self.sftp_session, path, OpenFlags::WRITE, truncate).await
-    }
+    async fn open_file(&self, path: &Path, open_options: &LinuxOpenOptions) -> io::Result<File> {
+        let mut flags = OpenFlags::empty();
+        if open_options.is_read() {
+            flags.insert(OpenFlags::READ);
+        }
+        if open_options.is_write() {
+            flags.insert(OpenFlags::WRITE);
+        }
+        if open_options.is_append() {
+            flags.insert(OpenFlags::APPEND);
+        }
+        if open_options.is_truncate() {
+            flags.insert(OpenFlags::TRUNCATE);
+        }
+        if open_options.is_create() {
+            flags.insert(OpenFlags::CREATE);
+        }
 
-    async fn file_open_append(&self, path: &Path) -> io::Result<File> {
-        internal_open_file(
-            &self.sftp_session,
-            path,
-            OpenFlags::union(OpenFlags::WRITE, OpenFlags::APPEND),
-            false,
+        internal_wrap_res(
+            self.sftp_session
+                .open_with_flags(path_to_str(path), flags)
+                .await,
         )
-        .await
-    }
-
-    async fn file_open_read(&self, path: &Path) -> io::Result<File> {
-        internal_open_file(&self.sftp_session, path, OpenFlags::READ, false).await
-    }
-
-    async fn file_open_read_write(&self, path: &Path, truncate: bool) -> io::Result<File> {
-        internal_open_file(
-            &self.sftp_session,
-            path,
-            OpenFlags::union(OpenFlags::READ, OpenFlags::WRITE),
-            truncate,
-        )
-        .await
-    }
-
-    async fn file_open_read_append(&self, path: &Path) -> io::Result<File> {
-        internal_open_file(
-            &self.sftp_session,
-            path,
-            OpenFlags::union(OpenFlags::READ, OpenFlags::APPEND),
-            false,
-        )
-        .await
     }
 
     async fn create_file(&self, path: &Path) -> io::Result<()> {
@@ -153,26 +136,6 @@ where
                 )
                 .await,
         )
-    }
-}
-
-async fn internal_open_file(
-    sftp_session: &Arc<SftpSession>,
-    path: &Path,
-    base_flags: OpenFlags,
-    truncate: bool,
-) -> io::Result<File> {
-    let mut flags = base_flags;
-    if truncate {
-        flags = OpenFlags::union(flags, OpenFlags::TRUNCATE);
-    }
-
-    match sftp_session
-        .open_with_flags(path_to_str(&path), flags)
-        .await
-    {
-        Ok(file) => return Ok(file),
-        Err(err) => return Err(io::Error::other(err)),
     }
 }
 

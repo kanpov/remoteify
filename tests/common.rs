@@ -1,7 +1,10 @@
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use lhf::ssh_russh::{connection::{RusshAuthentication, RusshConnectionOptions}, RusshLinux};
+use lhf::ssh_russh::{
+    connection::{RusshAuthentication, RusshConnectionOptions},
+    RusshLinux,
+};
 use russh::{
     client::{self, Config, Msg},
     Channel,
@@ -19,7 +22,7 @@ pub struct TestData {
     pub ssh: Channel<Msg>,
     pub sftp: SftpSession,
     pub implementation: RusshLinux<TestHandler>,
-    _container: ContainerAsync<GenericImage>
+    _container: ContainerAsync<GenericImage>,
 }
 
 impl TestData {
@@ -36,7 +39,7 @@ impl TestData {
         let ssh_port = ports
             .map_to_host_port_ipv4(ContainerPort::Tcp(22))
             .expect("Could not get SSH container port corresponding to 22");
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        tokio::time::sleep(Duration::from_millis(30)).await;
 
         let mut handle = client::connect(
             Arc::new(Config::default()),
@@ -73,16 +76,18 @@ impl TestData {
                 username: "root".into(),
                 config: Config::default(),
                 authentication: RusshAuthentication::Password {
-                    password: "root123".into()
+                    password: "root123".into(),
                 },
             },
-        ).await.expect("Could not establish impl");
+        )
+        .await
+        .expect("Could not establish impl");
 
         TestData {
             ssh: ssh_chan,
             sftp: sftp_session,
             implementation,
-            _container: container
+            _container: container,
         }
     }
 }
