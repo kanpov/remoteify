@@ -89,7 +89,7 @@ where
         };
 
         Ok(RusshLinux {
-            _handle: Arc::new(handle),
+            handle: Arc::new(Mutex::new(handle)),
             ssh_channel: Arc::new(Mutex::new(ssh_channel)),
             sftp_session: Arc::new(sftp_session),
         })

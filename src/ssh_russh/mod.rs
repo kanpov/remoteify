@@ -1,5 +1,6 @@
 pub mod connection;
 mod filesystem;
+mod network;
 
 use std::sync::Arc;
 
@@ -11,7 +12,7 @@ where
     T: client::Handler,
     T: 'static,
 {
-    _handle: Arc<client::Handle<T>>,
+    handle: Arc<Mutex<client::Handle<T>>>,
     ssh_channel: Arc<Mutex<russh::Channel<Msg>>>,
     sftp_session: Arc<russh_sftp::client::SftpSession>,
 }
