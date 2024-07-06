@@ -1,7 +1,8 @@
 use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::Path};
 
 use common::{conv_path, conv_path_non_buf, entries_contain, gen_nested_tmp_path, gen_tmp_path, TestData};
-use lhf::filesystem::{LinuxFileType, LinuxFilesystem, LinuxOpenOptions};
+use lhf::filesystem::{LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions};
+use russh_sftp::protocol::FileAttributes;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 mod common;
@@ -292,4 +293,54 @@ async fn remove_dir_recursively_should_persist() {
         .await
         .expect("Call failed");
     assert!(!test_data.sftp.try_exists(conv_path_non_buf(parent_path)).await.unwrap());
+}
+
+#[tokio::test]
+async fn get_metadata_should_return_correct_result() {
+    let test_data = TestData::setup().await;
+    let path = test_data.init_file("content").await;
+    let expected_metadata = test_data.sftp.metadata(conv_path(&path)).await.unwrap();
+    let actual_metadata = test_data.implementation.get_metadata(&path).await.expect("Call failed");
+    assert_metadata(expected_metadata, actual_metadata, LinuxFileType::File);
+}
+
+#[tokio::test]
+async fn get_symlink_metadata_should_return_correct_result() {
+    let test_data = TestData::setup().await;
+    let src_path = test_data.init_file("content").await;
+    let symlink_path = gen_tmp_path();
+    test_data
+        .sftp
+        .symlink(conv_path(&src_path), conv_path(&symlink_path))
+        .await
+        .unwrap();
+    let expected_metadata = test_data.sftp.symlink_metadata(conv_path(&symlink_path)).await.unwrap();
+    let actual_metadata = test_data
+        .implementation
+        .get_symlink_metadata(&symlink_path)
+        .await
+        .unwrap();
+    assert_metadata(expected_metadata, actual_metadata, LinuxFileType::Symlink);
+}
+
+fn assert_metadata(expected_metadata: FileAttributes, actual_metadata: LinuxFileMetadata, _file_type: LinuxFileType) {
+    assert!(matches!(actual_metadata.file_type().unwrap(), _file_type));
+    assert_eq!(actual_metadata.size().unwrap(), expected_metadata.size.unwrap());
+    assert_eq!(
+        actual_metadata.permissions().unwrap().mode(),
+        expected_metadata.permissions.unwrap()
+    );
+    assert_eq!(
+        actual_metadata.modified_time().unwrap(),
+        expected_metadata.modified().unwrap()
+    );
+    assert_eq!(
+        actual_metadata.accessed_time().unwrap(),
+        expected_metadata.modified().unwrap()
+    );
+    assert_eq!(actual_metadata.created_time(), None);
+    assert_eq!(actual_metadata.user_id().unwrap(), expected_metadata.uid.unwrap());
+    assert_eq!(actual_metadata.user_name(), None);
+    assert_eq!(actual_metadata.group_id().unwrap(), expected_metadata.gid.unwrap());
+    assert_eq!(actual_metadata.group_name(), None);
 }

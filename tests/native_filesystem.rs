@@ -1,12 +1,12 @@
 use std::{
-    fs::Permissions,
+    fs::{Metadata, Permissions},
     os::unix::fs::{MetadataExt, PermissionsExt},
     path::Path,
 };
 
 use common::{entries_contain, gen_nested_tmp_path, gen_tmp_path};
 use lhf::{
-    filesystem::{LinuxFileType, LinuxFilesystem, LinuxOpenOptions},
+    filesystem::{LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions},
     native::NativeLinux,
 };
 use tokio::{
@@ -255,8 +255,25 @@ async fn get_metadata_should_return_correct_result() {
     write(&path, b"content").await.unwrap();
     let expected_metadata = metadata(&path).await.unwrap();
     let actual_metadata = IMPL.get_metadata(&path).await.expect("Call failed");
+    assert_metadata(expected_metadata, actual_metadata, LinuxFileType::File);
+    remove_file(&path).await.unwrap();
+}
 
-    assert!(matches!(actual_metadata.file_type().unwrap(), LinuxFileType::File));
+#[tokio::test]
+async fn get_symlink_metadata_should_return_correct_result() {
+    let src_path = gen_tmp_path();
+    write(&src_path, "content").await.unwrap();
+    let symlink_path = gen_tmp_path();
+    symlink(&src_path, &symlink_path).await.unwrap();
+    let expected_metadata = symlink_metadata(&symlink_path).await.unwrap();
+    let actual_metadata = IMPL.get_symlink_metadata(&symlink_path).await.expect("Call failed");
+    assert_metadata(expected_metadata, actual_metadata, LinuxFileType::Symlink);
+    remove_file(&src_path).await.unwrap();
+    remove_file(&symlink_path).await.unwrap();
+}
+
+fn assert_metadata(expected_metadata: Metadata, actual_metadata: LinuxFileMetadata, _file_type: LinuxFileType) {
+    assert!(matches!(actual_metadata.file_type().unwrap(), _file_type));
     assert_eq!(actual_metadata.size().unwrap(), expected_metadata.size());
     assert_eq!(actual_metadata.permissions().unwrap(), expected_metadata.permissions());
     assert_eq!(
@@ -275,6 +292,4 @@ async fn get_metadata_should_return_correct_result() {
     assert_eq!(actual_metadata.user_name(), None);
     assert_eq!(actual_metadata.group_id().unwrap(), expected_metadata.gid());
     assert_eq!(actual_metadata.group_name(), None);
-
-    remove_file(&path).await.unwrap();
 }
