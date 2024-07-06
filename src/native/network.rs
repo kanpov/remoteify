@@ -8,7 +8,7 @@ use super::NativeLinux;
 
 #[async_trait]
 impl LinuxNetwork for NativeLinux {
-    fn is_remote(&self) -> bool {
+    fn is_remote_network(&self) -> bool {
         false
     }
 

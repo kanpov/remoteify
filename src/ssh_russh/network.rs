@@ -1,18 +1,17 @@
 use std::io;
 
 use async_trait::async_trait;
-use russh::client;
 
 use crate::network::LinuxNetwork;
 
-use super::RusshLinux;
+use super::{event_receiver::RusshEventReceiver, RusshLinux};
 
 #[async_trait]
 impl<T> LinuxNetwork for RusshLinux<T>
 where
-    T: client::Handler,
+    T: RusshEventReceiver,
 {
-    fn is_remote(&self) -> bool {
+    fn is_remote_network(&self) -> bool {
         true
     }
 

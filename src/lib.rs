@@ -1,5 +1,6 @@
 pub mod filesystem;
 pub mod network;
+pub mod terminal;
 
 #[cfg(feature = "native")]
 pub mod native;

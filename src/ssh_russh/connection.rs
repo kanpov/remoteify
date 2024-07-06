@@ -1,20 +1,17 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use russh::client::{self};
-use russh_keys::key::{KeyPair, PublicKey};
+use russh_keys::key::KeyPair;
 use russh_sftp::client::SftpSession;
 use tokio::sync::Mutex;
 
 use crate::ssh_russh::RusshLinux;
 
+use super::event_receiver::{DelegatingHandler, RusshEventReceiver};
+
 #[derive(Debug)]
-pub enum RusshConnectionError<T>
-where
-    T: client::Handler,
-    T: 'static,
-{
-    ConnectionError(T::Error),
+pub enum RusshConnectionError {
+    ConnectionError(russh::Error),
     AuthenticationError(russh::Error),
     ChannelOpenError(russh::Error),
     SftpRequestError(russh::Error),
@@ -35,18 +32,24 @@ pub enum RusshAuthentication {
     None,
 }
 
-impl<T> RusshLinux<T>
+impl<R> RusshLinux<R>
 where
-    T: client::Handler,
+    R: RusshEventReceiver,
 {
     pub async fn connect(
-        handler: T,
+        event_receiver: R,
         connection_options: RusshConnectionOptions,
-    ) -> Result<RusshLinux<T>, RusshConnectionError<T>> {
+    ) -> Result<RusshLinux<R>, RusshConnectionError>
+    where
+        R: 'static,
+    {
+        let handler_impl = DelegatingHandler {
+            russh_handler: event_receiver,
+        };
         let mut handle = match client::connect(
             Arc::new(connection_options.config),
             (connection_options.host, connection_options.port),
-            handler,
+            handler_impl,
         )
         .await
         {
@@ -55,17 +58,19 @@ where
         };
 
         match connection_options.authentication {
-            RusshAuthentication::Password { password } => map_to_error(
+            RusshAuthentication::Password { password } => map_to_error::<R>(
                 handle
                     .authenticate_password(connection_options.username, password)
                     .await,
             )?,
-            RusshAuthentication::PublicKey { key_pair } => map_to_error(
+            RusshAuthentication::PublicKey { key_pair } => map_to_error::<R>(
                 handle
                     .authenticate_publickey(connection_options.username, Arc::new(key_pair))
                     .await,
             )?,
-            RusshAuthentication::None => map_to_error(handle.authenticate_none(connection_options.username).await)?,
+            RusshAuthentication::None => {
+                map_to_error::<R>(handle.authenticate_none(connection_options.username).await)?
+            }
         }
 
         let sftp_channel = match handle.channel_open_session().await {
@@ -96,24 +101,11 @@ where
     }
 }
 
-fn map_to_error<T>(result: Result<bool, russh::Error>) -> Result<(), RusshConnectionError<T>>
+fn map_to_error<T>(result: Result<bool, russh::Error>) -> Result<(), RusshConnectionError>
 where
-    T: client::Handler,
+    T: RusshEventReceiver,
 {
-    if result.is_err() {
-        return Err(RusshConnectionError::AuthenticationError(result.unwrap_err()));
-    }
-    Ok(())
-}
-
-#[derive(Debug)]
-pub struct TrustingHandler {}
-
-#[async_trait]
-impl client::Handler for TrustingHandler {
-    type Error = russh::Error;
-
-    async fn check_server_key(&mut self, _server_public_key: &PublicKey) -> Result<bool, Self::Error> {
-        Ok(true)
-    }
+    result
+        .map(|_| ())
+        .map_err(|err| RusshConnectionError::AuthenticationError(err))
 }

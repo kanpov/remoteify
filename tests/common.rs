@@ -8,6 +8,7 @@ use lhf::{
     filesystem::{LinuxDirEntry, LinuxFileType},
     ssh_russh::{
         connection::{RusshAuthentication, RusshConnectionOptions},
+        event_receiver::RusshEventReceiver,
         RusshLinux,
     },
 };
@@ -35,7 +36,7 @@ pub fn gen_nested_tmp_path() -> PathBuf {
 pub struct TestData {
     pub ssh: Channel<Msg>,
     pub sftp: SftpSession,
-    pub implementation: RusshLinux<TestHandler>,
+    pub implementation: RusshLinux<ApiHandler>,
     _container: ContainerAsync<GenericImage>,
 }
 
@@ -51,9 +52,9 @@ impl TestData {
             .map_to_host_port_ipv4(ContainerPort::Tcp(22))
             .expect("Could not get SSH container port corresponding to 22");
 
-        let mut handle_option: Option<Handle<TestHandler>> = None;
+        let mut handle_option: Option<Handle<ActualHandler>> = None;
         loop {
-            match client::connect(Arc::new(Config::default()), ("localhost", ssh_port), TestHandler {}).await {
+            match client::connect(Arc::new(Config::default()), ("localhost", ssh_port), ActualHandler {}).await {
                 Ok(handle) => {
                     handle_option = Some(handle);
                     break;
@@ -80,7 +81,7 @@ impl TestData {
             .await
             .expect("Could not open SFTP session");
         let implementation = RusshLinux::connect(
-            TestHandler {},
+            ApiHandler {},
             RusshConnectionOptions {
                 host: "localhost".into(),
                 port: ssh_port,
@@ -132,10 +133,14 @@ pub fn entries_contain(entries: &Vec<LinuxDirEntry>, expected_type: LinuxFileTyp
 }
 
 #[derive(Debug)]
-pub struct TestHandler {}
+pub struct ActualHandler {}
+
+pub struct ApiHandler {}
+
+impl RusshEventReceiver for ApiHandler {}
 
 #[async_trait]
-impl client::Handler for TestHandler {
+impl client::Handler for ActualHandler {
     type Error = russh::Error;
 
     async fn check_server_key(&mut self, _server_public_key: &PublicKey) -> Result<bool, Self::Error> {
