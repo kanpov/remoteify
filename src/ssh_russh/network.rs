@@ -16,7 +16,7 @@ where
         true
     }
 
-    async fn route_tcp_forward(&mut self, host: &String, port: u32) -> io::Result<u32> {
+    async fn route_tcp_forward(&mut self, host: &str, port: u32) -> io::Result<u32> {
         let mut handle_instance = self.handle.lock().await;
         handle_instance
             .tcpip_forward(host, port)
