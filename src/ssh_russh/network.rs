@@ -4,12 +4,12 @@ use async_trait::async_trait;
 
 use crate::network::LinuxNetwork;
 
-use super::{event_receiver::RusshEventReceiver, RusshLinux};
+use super::{event_receiver::RusshGlobalReceiver, RusshLinux};
 
 #[async_trait]
 impl<T> LinuxNetwork for RusshLinux<T>
 where
-    T: RusshEventReceiver,
+    T: RusshGlobalReceiver,
 {
     fn is_remote_network(&self) -> bool {
         true

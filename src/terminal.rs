@@ -1,11 +1,13 @@
 use async_trait::async_trait;
 
+#[derive(Debug, Clone, Copy)]
 pub enum TerminalEvent<'a> {
     EOFReceived,
     DataReceived {
         data: &'a [u8],
     },
     ExtendedDataReceived {
+        ext: u32,
         extended_data: &'a [u8],
     },
     XonXoffAbilityReceived {
@@ -23,10 +25,10 @@ pub enum TerminalEvent<'a> {
     WindowAdjusted {
         new_size: u32,
     },
-    CriticalFailure,
+    TerminalDisconnected,
 }
 
 #[async_trait]
-pub trait TerminalEventReceiver {
-    async fn receive_event(terminal_event: &TerminalEvent);
+pub trait TerminalEventReceiver: Send {
+    async fn receive_event(&self, terminal_event: TerminalEvent);
 }

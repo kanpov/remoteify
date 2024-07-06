@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use russh::client::{self};
 use russh_keys::key::KeyPair;
@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 
 use crate::ssh_russh::RusshLinux;
 
-use super::event_receiver::{DelegatingHandler, RusshEventReceiver};
+use super::event_receiver::{DelegatingHandler, RusshGlobalReceiver};
 
 #[derive(Debug)]
 pub enum RusshConnectionError {
@@ -34,7 +34,7 @@ pub enum RusshAuthentication {
 
 impl<R> RusshLinux<R>
 where
-    R: RusshEventReceiver,
+    R: RusshGlobalReceiver,
 {
     pub async fn connect(
         event_receiver: R,
@@ -43,13 +43,13 @@ where
     where
         R: 'static,
     {
-        let handler_impl = DelegatingHandler {
-            russh_handler: event_receiver,
-        };
         let mut handle = match client::connect(
             Arc::new(connection_options.config),
             (connection_options.host, connection_options.port),
-            handler_impl,
+            DelegatingHandler {
+                global_receiver: event_receiver,
+                terminal_receivers: HashMap::new(),
+            },
         )
         .await
         {
@@ -103,7 +103,7 @@ where
 
 fn map_to_error<T>(result: Result<bool, russh::Error>) -> Result<(), RusshConnectionError>
 where
-    T: RusshEventReceiver,
+    T: RusshGlobalReceiver,
 {
     result
         .map(|_| ())

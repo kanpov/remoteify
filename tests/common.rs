@@ -8,7 +8,7 @@ use lhf::{
     filesystem::{LinuxDirEntry, LinuxFileType},
     ssh_russh::{
         connection::{RusshAuthentication, RusshConnectionOptions},
-        event_receiver::RusshEventReceiver,
+        event_receiver::RusshGlobalReceiver,
         RusshLinux,
     },
 };
@@ -137,7 +137,7 @@ pub struct ActualHandler {}
 
 pub struct ApiHandler {}
 
-impl RusshEventReceiver for ApiHandler {}
+impl RusshGlobalReceiver for ApiHandler {}
 
 #[async_trait]
 impl client::Handler for ActualHandler {
