@@ -107,7 +107,7 @@ pub trait LinuxProcess {
 
     async fn await_exit(&mut self) -> Result<Option<i64>, LinuxProcessError>;
 
-    async fn await_exit_with_output(self) -> Result<LinuxProcessOutput, LinuxProcessError>;
+    async fn await_exit_with_output(mut self) -> Result<LinuxProcessOutput, LinuxProcessError>;
 
     async fn send_kill_request(&mut self) -> Result<(), LinuxProcessError>;
 }

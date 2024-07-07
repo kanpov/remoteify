@@ -1,10 +1,12 @@
 pub mod connection;
+mod executor;
 mod filesystem;
 mod network;
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use executor::EXECUTOR_BUFFERS;
 use russh::{
     client::{self, DisconnectReason, Msg, Session},
     Channel, ChannelId, ChannelOpenFailure, Sig,
@@ -162,6 +164,14 @@ where
 
     #[allow(unused_variables)]
     async fn data(&mut self, channel: ChannelId, data: &[u8], session: &mut Session) -> Result<(), Self::Error> {
+        if let Some(buf) = EXECUTOR_BUFFERS
+            .write()
+            .expect("Executor buffers RWLock poisoned!")
+            .get_mut(&channel)
+        {
+            buf.extend(data);
+        }
+
         self.inner.data(channel, data, session).await
     }
 
@@ -172,6 +182,14 @@ where
         data: &[u8],
         session: &mut Session,
     ) -> Result<(), Self::Error> {
+        if let Some(buf) = EXECUTOR_BUFFERS
+            .write()
+            .expect("Executor buffers RWLock poisoned!")
+            .get_mut(&channel)
+        {
+            buf.extend(data);
+        }
+
         self.inner.extended_data(channel, ext, data, session).await
     }
 

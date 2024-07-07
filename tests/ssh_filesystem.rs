@@ -1,7 +1,10 @@
 use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::Path};
 
 use common::{conv_path, conv_path_non_buf, entries_contain, gen_nested_tmp_path, gen_tmp_path, TestData};
-use lhf::filesystem::{LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions};
+use lhf::{
+    executor::{LinuxExecutor, LinuxProcessConfiguration},
+    filesystem::{LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions},
+};
 use russh_sftp::protocol::FileAttributes;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -343,4 +346,20 @@ fn assert_metadata(expected_metadata: FileAttributes, actual_metadata: LinuxFile
     assert_eq!(actual_metadata.user_name(), None);
     assert_eq!(actual_metadata.group_id().unwrap(), expected_metadata.gid.unwrap());
     assert_eq!(actual_metadata.group_name(), None);
+}
+
+#[tokio::test]
+async fn t() {
+    let test_data = TestData::setup().await;
+    let o = test_data
+        .implementation
+        .execute(
+            LinuxProcessConfiguration::new("cat".into())
+                .arg("--help".into())
+                .clone(),
+        )
+        .await
+        .unwrap();
+    let stdo = String::from_utf8(o.stdout).unwrap();
+    println!("{stdo}");
 }
