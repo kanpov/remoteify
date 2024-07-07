@@ -33,7 +33,7 @@ pub enum LinuxTerminalEvent<'a> {
 pub enum LinuxTerminalError {
     DHSInternalProblem,
     EventReceiverNotSupported,
-    EventReceiverDuplicated,
+    EventReceiverAlreadyExists,
     EventReceiverMissing,
     Other(Arc<Box<dyn Error>>),
 }

@@ -1,6 +1,6 @@
 use std::{
-    collections::HashMap,
-    sync::{atomic::AtomicU16, Arc},
+    collections::{HashMap, HashSet},
+    sync::Arc,
 };
 
 use async_trait::async_trait;
@@ -22,24 +22,15 @@ pub trait RusshGlobalReceiver: Send {
     }
 }
 
-// shared reference to the DHS
-pub(super) static DHS: Lazy<DelegatingHandlerStorage> = Lazy::new(|| DelegatingHandlerStorage {
-    hash_map: HashMap::new(),
-});
-// generator of IDs for the DHS
-pub(super) static DHS_ID_GEN: AtomicU16 = AtomicU16::new(0);
-
-// the DHS, mapping each RusshLinux to an rwlocked map of channel-ids to event receivers for those channels
-pub(super) struct DelegatingHandlerStorage {
-    pub hash_map: HashMap<u16, Arc<RwLock<HashMap<ChannelId, Box<dyn LinuxTerminalEventReceiver>>>>>,
-}
+pub(super) static DHS: Lazy<Arc<RwLock<HashMap<ChannelId, Box<dyn LinuxTerminalEventReceiver>>>>> =
+    Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
 
 pub(super) struct DelegatingHandler<R>
 where
     R: RusshGlobalReceiver,
 {
-    pub dhs_id: u16,
     pub global_receiver: R,
+    pub channel_ids: Arc<RwLock<HashSet<ChannelId>>>,
 }
 
 #[async_trait]
@@ -49,16 +40,32 @@ where
 {
     type Error = russh::Error;
 
+    async fn channel_open_confirmation(
+        &mut self,
+        channel: ChannelId,
+        _max_packet_size: u32,
+        _window_size: u32,
+        _session: &mut Session,
+    ) -> Result<(), Self::Error> {
+        self.channel_ids.write().await.insert(channel);
+        Ok(())
+    }
+
+    async fn channel_close(&mut self, channel: ChannelId, _session: &mut Session) -> Result<(), Self::Error> {
+        self.channel_ids.write().await.remove(&channel);
+        Ok(())
+    }
+
     async fn check_server_key(&mut self, server_public_key: &key::PublicKey) -> Result<bool, Self::Error> {
         self.global_receiver.check_server_key(server_public_key).await
     }
 
     async fn channel_eof(&mut self, channel: ChannelId, _session: &mut Session) -> Result<(), Self::Error> {
-        send_off(self, channel, LinuxTerminalEvent::EOFReceived).await
+        send_off(channel, LinuxTerminalEvent::EOFReceived).await
     }
 
     async fn data(&mut self, channel: ChannelId, data: &[u8], _session: &mut Session) -> Result<(), Self::Error> {
-        send_off(self, channel, LinuxTerminalEvent::DataReceived { data }).await
+        send_off(channel, LinuxTerminalEvent::DataReceived { data }).await
     }
 
     async fn extended_data(
@@ -69,7 +76,6 @@ where
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
         send_off(
-            self,
             channel,
             LinuxTerminalEvent::ExtendedDataReceived {
                 ext,
@@ -86,7 +92,6 @@ where
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
         send_off(
-            self,
             channel,
             LinuxTerminalEvent::XonXoffAbilityReceived {
                 can_perform_xon_xoff: client_can_do,
@@ -101,7 +106,7 @@ where
         exit_status: u32,
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
-        send_off(self, channel, LinuxTerminalEvent::ProcessExitedNormally { exit_status }).await
+        send_off(channel, LinuxTerminalEvent::ProcessExitedNormally { exit_status }).await
     }
 
     async fn exit_signal(
@@ -114,7 +119,6 @@ where
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
         send_off(
-            self,
             channel,
             LinuxTerminalEvent::ProcessExitedAfterSignal {
                 signal: &conv_sig_to_str(signal_name),
@@ -132,18 +136,16 @@ where
         new_size: u32,
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
-        send_off(self, channel, LinuxTerminalEvent::WindowAdjusted { new_size }).await
+        send_off(channel, LinuxTerminalEvent::WindowAdjusted { new_size }).await
     }
 
     async fn disconnected(&mut self, _reason: DisconnectReason<Self::Error>) -> Result<(), Self::Error> {
-        let dhs_ref = DHS
-            .hash_map
-            .get(&self.dhs_id)
-            .ok_or(russh::Error::WrongChannel)?
-            .read()
-            .await;
-        for receiver in dhs_ref.values() {
-            receiver.receive_event(LinuxTerminalEvent::TerminalDisconnected).await;
+        let channel_ids = self.channel_ids.read().await;
+        let dhs_ref = DHS.read().await;
+        for channel_id in channel_ids.iter() {
+            if let Some(receiver) = dhs_ref.get(channel_id) {
+                receiver.receive_event(LinuxTerminalEvent::TerminalDisconnected).await;
+            }
         }
 
         Ok(())
@@ -168,23 +170,12 @@ fn conv_sig_to_str(sig: Sig) -> String {
     }
 }
 
-async fn send_off<'a, R>(
-    delegating_handler: &mut DelegatingHandler<R>,
-    channel: ChannelId,
-    terminal_event: LinuxTerminalEvent<'a>,
-) -> Result<(), russh::Error>
-where
-    R: RusshGlobalReceiver,
-{
-    let dhs_ref = DHS
-        .hash_map
-        .get(&delegating_handler.dhs_id)
-        .ok_or(russh::Error::WrongChannel)?
-        .read()
-        .await;
+async fn send_off<'a>(channel: ChannelId, terminal_event: LinuxTerminalEvent<'a>) -> Result<(), russh::Error> {
+    let dhs_ref = DHS.read().await;
 
     if let Some(receiver) = dhs_ref.get(&channel) {
         receiver.receive_event(terminal_event).await;
     }
+
     Ok(())
 }

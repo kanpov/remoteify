@@ -17,7 +17,6 @@ pub struct RusshLinux<R>
 where
     R: RusshGlobalReceiver,
 {
-    dhs_id: u16,
     handle_mutex: Arc<Mutex<client::Handle<DelegatingHandler<R>>>>,
     fs_channel_mutex: Arc<Mutex<Channel<Msg>>>,
     sftp_session: Arc<russh_sftp::client::SftpSession>,

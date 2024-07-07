@@ -12,8 +12,8 @@ use super::{
 };
 
 pub struct RusshLinuxTerminal {
-    dhs_id: u16,
-    _channel_mutex: Arc<Mutex<Channel<Msg>>>,
+    #[allow(unused)]
+    channel_mutex: Arc<Mutex<Channel<Msg>>>,
     channel_id: ChannelId,
 }
 
@@ -27,37 +27,29 @@ impl LinuxTerminal for RusshLinuxTerminal {
     where
         R: LinuxTerminalEventReceiver + 'static,
     {
-        let dhs_map = DHS
-            .hash_map
-            .get(&self.dhs_id)
-            .ok_or(LinuxTerminalError::DHSInternalProblem)?;
-
-        let read_ref = dhs_map.read().await;
-        if read_ref.contains_key(&self.channel_id) {
-            return Err(LinuxTerminalError::EventReceiverDuplicated);
+        let read_ref = DHS.read().await;
+        if let Some(_) = read_ref.get(&self.channel_id) {
+            return Err(LinuxTerminalError::EventReceiverAlreadyExists);
         }
         drop(read_ref);
 
-        let mut write_ref = dhs_map.write().await;
+        let mut write_ref = DHS.write().await;
         write_ref.insert(self.channel_id, Box::new(receiver));
+        drop(write_ref);
 
         Ok(())
     }
 
     async fn unregister_event_receiver(&self) -> Result<(), LinuxTerminalError> {
-        let dhs_map = DHS
-            .hash_map
-            .get(&self.dhs_id)
-            .ok_or(LinuxTerminalError::DHSInternalProblem)?;
-
-        let read_ref = dhs_map.read().await;
-        if !read_ref.contains_key(&self.channel_id) {
+        let read_ref = DHS.read().await;
+        if let None = read_ref.get(&self.channel_id) {
             return Err(LinuxTerminalError::EventReceiverMissing);
         }
         drop(read_ref);
 
-        let mut write_ref = dhs_map.write().await;
+        let mut write_ref = DHS.write().await;
         write_ref.remove(&self.channel_id);
+        drop(write_ref);
 
         Ok(())
     }
@@ -73,8 +65,7 @@ where
         let channel = handle.channel_open_session().await.map_err(LinuxTerminalError::other)?;
         let channel_id = channel.id();
         Ok(RusshLinuxTerminal {
-            dhs_id: self.dhs_id,
-            _channel_mutex: Arc::new(Mutex::new(channel)),
+            channel_mutex: Arc::new(Mutex::new(channel)),
             channel_id,
         })
     }
@@ -95,8 +86,7 @@ where
             .map_err(LinuxTerminalError::other)?;
         let channel_id = channel.id();
         Ok(RusshLinuxTerminal {
-            dhs_id: self.dhs_id,
-            _channel_mutex: Arc::new(Mutex::new(channel)),
+            channel_mutex: Arc::new(Mutex::new(channel)),
             channel_id,
         })
     }

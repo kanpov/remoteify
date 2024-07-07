@@ -1,13 +1,13 @@
-use std::sync::{atomic::Ordering, Arc};
+use std::{collections::HashSet, sync::Arc};
 
 use russh::client;
 use russh_keys::key::KeyPair;
 use russh_sftp::client::SftpSession;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::ssh_russh::RusshLinux;
 
-use super::event_receiver::{DelegatingHandler, RusshGlobalReceiver, DHS_ID_GEN};
+use super::event_receiver::{DelegatingHandler, RusshGlobalReceiver};
 
 #[derive(Debug)]
 pub enum RusshConnectionError {
@@ -44,15 +44,13 @@ where
     where
         R: 'static,
     {
-        let dhs_id = DHS_ID_GEN.fetch_add(1, Ordering::Relaxed);
-        let delegating_handler = DelegatingHandler {
-            global_receiver: event_receiver,
-            dhs_id,
-        };
         let mut handle = client::connect(
             Arc::new(connection_options.config),
             (connection_options.host, connection_options.port),
-            delegating_handler,
+            DelegatingHandler {
+                global_receiver: event_receiver,
+                channel_ids: Arc::new(RwLock::new(HashSet::new())),
+            },
         )
         .await
         .map_err(|err| RusshConnectionError::ConnectionError(err))?;
@@ -93,7 +91,6 @@ where
             .map_err(|err| RusshConnectionError::SftpChannelOpenError(err))?;
 
         Ok(RusshLinux {
-            dhs_id,
             handle_mutex: Arc::new(Mutex::new(handle)),
             fs_channel_mutex: Arc::new(Mutex::new(fs_ssh_channel)),
             sftp_session: Arc::new(sftp_session),
