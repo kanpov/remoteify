@@ -1,13 +1,15 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use russh::{client::Msg, Channel, ChannelId};
+use russh::{client::Msg, Channel, ChannelId, ChannelMsg};
 use tokio::sync::Mutex;
 
-use crate::terminal::{LinuxTerminal, LinuxTerminalError, LinuxTerminalEventReceiver, LinuxTerminalLauncher};
+use crate::terminal::{
+    LinuxTerminal, LinuxTerminalError, LinuxTerminalEvent, LinuxTerminalEventReceiver, LinuxTerminalLauncher,
+};
 
 use super::{
-    event_receiver::{RusshGlobalReceiver, DHS},
+    event_receiver::{conv_sig_to_str, RusshGlobalReceiver, DHS},
     RusshLinux,
 };
 
@@ -51,6 +53,73 @@ impl LinuxTerminal for RusshLinuxTerminal {
         write_ref.remove(&self.channel_id);
         drop(write_ref);
 
+        Ok(())
+    }
+
+    async fn run(&self, command: String) -> Result<(), LinuxTerminalError> {
+        let channel = self.channel_mutex.lock().await;
+        channel.exec(true, command).await.map_err(LinuxTerminalError::other)
+    }
+
+    async fn await_next_event(&self) -> Option<LinuxTerminalEvent> {
+        let mut channel = self.channel_mutex.lock().await;
+
+        loop {
+            match channel.wait().await {
+                None => {
+                    return None; // no event to be received
+                }
+                Some(ChannelMsg::Eof) => return Some(LinuxTerminalEvent::EOFReceived),
+                Some(ChannelMsg::Data { data }) => {
+                    let vec: Vec<u8> = data.as_ref().into();
+                    return Some(LinuxTerminalEvent::DataReceived { data: vec });
+                }
+                Some(ChannelMsg::ExtendedData { data, ext }) => {
+                    let vec: Vec<u8> = data.as_ref().into();
+                    return Some(LinuxTerminalEvent::ExtendedDataReceived {
+                        ext,
+                        extended_data: vec,
+                    });
+                }
+                Some(ChannelMsg::XonXoff { client_can_do }) => {
+                    return Some(LinuxTerminalEvent::XonXoffAbilityReceived {
+                        can_perform_xon_xoff: client_can_do,
+                    })
+                }
+                Some(ChannelMsg::ExitStatus { exit_status }) => {
+                    return Some(LinuxTerminalEvent::ProcessExitedNormally { exit_status });
+                }
+                Some(ChannelMsg::ExitSignal {
+                    signal_name,
+                    core_dumped,
+                    error_message,
+                    lang_tag,
+                }) => {
+                    return Some(LinuxTerminalEvent::ProcessExitedAfterSignal {
+                        signal: conv_sig_to_str(signal_name),
+                        core_dumped,
+                        error_message,
+                        lang_tag,
+                    });
+                }
+                Some(ChannelMsg::WindowAdjusted { new_size }) => {
+                    return Some(LinuxTerminalEvent::WindowAdjusted { new_size });
+                }
+                Some(ChannelMsg::Success) => {
+                    return Some(LinuxTerminalEvent::QueuedOperationSucceeded);
+                }
+                Some(ChannelMsg::Failure) => {
+                    return Some(LinuxTerminalEvent::QueuedOperationFailed);
+                }
+                Some(_) => {} // an event that isn't supposed to be received by a terminal, but rather by a global receiver
+            }
+        }
+    }
+
+    async fn quit(&self) -> Result<(), LinuxTerminalError> {
+        let channel = self.channel_mutex.lock().await;
+        channel.close().await.map_err(LinuxTerminalError::other)?;
+        DHS.write().await.remove(&self.channel_id);
         Ok(())
     }
 }

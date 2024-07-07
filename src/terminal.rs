@@ -2,15 +2,15 @@ use std::{error::Error, sync::Arc};
 
 use async_trait::async_trait;
 
-#[derive(Debug, Clone, Copy)]
-pub enum LinuxTerminalEvent<'a> {
+#[derive(Debug, Clone)]
+pub enum LinuxTerminalEvent {
     EOFReceived,
     DataReceived {
-        data: &'a [u8],
+        data: Vec<u8>,
     },
     ExtendedDataReceived {
         ext: u32,
-        extended_data: &'a [u8],
+        extended_data: Vec<u8>,
     },
     XonXoffAbilityReceived {
         can_perform_xon_xoff: bool,
@@ -19,20 +19,23 @@ pub enum LinuxTerminalEvent<'a> {
         exit_status: u32,
     },
     ProcessExitedAfterSignal {
-        signal: &'a str,
+        signal: String,
         core_dumped: bool,
-        error_message: &'a str,
-        lang_tag: &'a str,
+        error_message: String,
+        lang_tag: String,
     },
     WindowAdjusted {
         new_size: u32,
     },
+    QueuedOperationSucceeded,
+    QueuedOperationFailed,
     TerminalDisconnected,
 }
 
+#[derive(Debug, Clone)]
 pub enum LinuxTerminalError {
     DHSInternalProblem,
-    EventReceiverNotSupported,
+    NotSupported,
     EventReceiverAlreadyExists,
     EventReceiverMissing,
     Other(Arc<Box<dyn Error>>),
@@ -53,7 +56,7 @@ pub trait LinuxTerminalEventReceiver: Send + Sync {
 }
 
 #[async_trait]
-pub trait LinuxTerminal: Send + Sync {
+pub trait LinuxTerminal {
     fn supports_event_receiver(&self) -> bool {
         false
     }
@@ -63,12 +66,18 @@ pub trait LinuxTerminal: Send + Sync {
     where
         R: LinuxTerminalEventReceiver + 'static,
     {
-        Err(LinuxTerminalError::EventReceiverNotSupported)
+        Err(LinuxTerminalError::NotSupported)
     }
 
     async fn unregister_event_receiver(&self) -> Result<(), LinuxTerminalError> {
-        Err(LinuxTerminalError::EventReceiverNotSupported)
+        Err(LinuxTerminalError::NotSupported)
     }
+
+    async fn run(&self, command: String) -> Result<(), LinuxTerminalError>;
+
+    async fn await_next_event(&self) -> Option<LinuxTerminalEvent>;
+
+    async fn quit(&self) -> Result<(), LinuxTerminalError>;
 }
 
 #[async_trait]

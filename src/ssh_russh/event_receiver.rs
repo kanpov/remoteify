@@ -51,6 +51,14 @@ where
         Ok(())
     }
 
+    async fn channel_success(&mut self, channel: ChannelId, _session: &mut Session) -> Result<(), Self::Error> {
+        send_off(channel, LinuxTerminalEvent::QueuedOperationSucceeded).await
+    }
+
+    async fn channel_failure(&mut self, channel: ChannelId, _session: &mut Session) -> Result<(), Self::Error> {
+        send_off(channel, LinuxTerminalEvent::QueuedOperationFailed).await
+    }
+
     async fn channel_close(&mut self, channel: ChannelId, _session: &mut Session) -> Result<(), Self::Error> {
         self.channel_ids.write().await.remove(&channel);
         Ok(())
@@ -65,7 +73,8 @@ where
     }
 
     async fn data(&mut self, channel: ChannelId, data: &[u8], _session: &mut Session) -> Result<(), Self::Error> {
-        send_off(channel, LinuxTerminalEvent::DataReceived { data }).await
+        let vec: Vec<u8> = data.into();
+        send_off(channel, LinuxTerminalEvent::DataReceived { data: vec }).await
     }
 
     async fn extended_data(
@@ -75,11 +84,12 @@ where
         data: &[u8],
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
+        let vec: Vec<u8> = data.into();
         send_off(
             channel,
             LinuxTerminalEvent::ExtendedDataReceived {
                 ext,
-                extended_data: data,
+                extended_data: vec,
             },
         )
         .await
@@ -121,10 +131,10 @@ where
         send_off(
             channel,
             LinuxTerminalEvent::ProcessExitedAfterSignal {
-                signal: &conv_sig_to_str(signal_name),
+                signal: conv_sig_to_str(signal_name),
                 core_dumped,
-                error_message,
-                lang_tag,
+                error_message: error_message.into(),
+                lang_tag: lang_tag.into(),
             },
         )
         .await
@@ -152,7 +162,7 @@ where
     }
 }
 
-fn conv_sig_to_str(sig: Sig) -> String {
+pub(super) fn conv_sig_to_str(sig: Sig) -> String {
     match sig {
         Sig::ABRT => "ABRT".into(),
         Sig::ALRM => "ALRM".into(),
@@ -170,7 +180,7 @@ fn conv_sig_to_str(sig: Sig) -> String {
     }
 }
 
-async fn send_off<'a>(channel: ChannelId, terminal_event: LinuxTerminalEvent<'a>) -> Result<(), russh::Error> {
+async fn send_off(channel: ChannelId, terminal_event: LinuxTerminalEvent) -> Result<(), russh::Error> {
     let dhs_ref = DHS.read().await;
 
     if let Some(receiver) = dhs_ref.get(&channel) {
