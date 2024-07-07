@@ -41,11 +41,7 @@ impl LinuxFilesystem for NativeLinux {
     }
 
     async fn create_file(&self, path: &Path) -> io::Result<()> {
-        let file = match File::create_new(path).await {
-            Ok(file) => file,
-            Err(err) => return Err(err),
-        };
-        drop(file);
+        let _ = File::create_new(path).await?;
         Ok(())
     }
 
@@ -97,22 +93,20 @@ impl LinuxFilesystem for NativeLinux {
 
         let mut entries: Vec<LinuxDirEntry> = vec![];
         loop {
-            let entry = match read_dir.next_entry().await {
-                Ok(entry) => entry,
-                Err(err) => return Err(err),
-            };
+            let entry = read_dir.next_entry().await?;
 
             match entry {
                 Some(entry_value) => {
-                    let entry_name = match entry_value.file_name().into_string() {
-                        Ok(entry_name) => entry_name,
-                        Err(_) => return Err(io::Error::other("could not convert os_str into str")),
-                    };
+                    let entry_name = entry_value
+                        .file_name()
+                        .into_string()
+                        .map_err(|_| io::Error::other("could not convert entry filename into string"))?;
 
-                    let file_type = match entry_value.file_type().await {
-                        Ok(entry_type) => entry_type.into(),
-                        Err(err) => return Err(io::Error::other(err)),
-                    };
+                    let file_type = entry_value
+                        .file_type()
+                        .await
+                        .map(|entry_type| entry_type.into())
+                        .map_err(io::Error::other)?;
 
                     let entry_path = entry_value.path();
 

@@ -20,6 +20,6 @@ where
         handle_instance
             .tcpip_forward(host, port)
             .await
-            .map_err(|err| io::Error::other(err))
+            .map_err(io::Error::other)
     }
 }

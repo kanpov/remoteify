@@ -22,7 +22,10 @@ where
     R: RusshGlobalReceiver,
 {
     async fn exists(&self, path: &Path) -> io::Result<bool> {
-        wrap_res(self.sftp_session.try_exists(conv_path(path)).await)
+        self.sftp_session
+            .try_exists(conv_path(path))
+            .await
+            .map_err(io::Error::other)
     }
 
     async fn open_file(&self, path: &Path, open_options: &LinuxOpenOptions) -> io::Result<File> {
@@ -43,91 +46,98 @@ where
             flags.insert(OpenFlags::CREATE);
         }
 
-        wrap_res(self.sftp_session.open_with_flags(conv_path(path), flags).await)
+        self.sftp_session
+            .open_with_flags(conv_path(path), flags)
+            .await
+            .map_err(io::Error::other)
     }
 
     async fn create_file(&self, path: &Path) -> io::Result<()> {
-        let file = match self.sftp_session.create(conv_path(path)).await {
-            Ok(file) => file,
-            Err(err) => return Err(io::Error::other(err)),
-        };
+        let file = self
+            .sftp_session
+            .create(conv_path(path))
+            .await
+            .map_err(io::Error::other)?;
         drop(file);
         Ok(())
     }
 
     async fn rename_file(&self, old_path: &Path, new_path: &Path) -> io::Result<()> {
-        wrap_res(self.sftp_session.rename(conv_path(old_path), conv_path(new_path)).await)
+        self.sftp_session
+            .rename(conv_path(old_path), conv_path(new_path))
+            .await
+            .map_err(io::Error::other)
     }
 
     async fn copy_file(&self, old_path: &Path, new_path: &Path) -> io::Result<Option<u64>> {
-        let result = run_fs_command(self, format!("cp {} {}", conv_path(old_path), conv_path(new_path))).await;
-        match result {
-            Ok(_) => Ok(None),
-            Err(err) => Err(err),
-        }
+        run_fs_command(self, format!("cp {} {}", conv_path(old_path), conv_path(new_path)))
+            .await
+            .map(|_| None)
     }
 
     async fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> {
-        let path_buf = match self.sftp_session.canonicalize(conv_path(path)).await {
-            Ok(path) => PathBuf::from(path),
-            Err(err) => return Err(io::Error::other(err)),
-        };
-        Ok(path_buf)
+        self.sftp_session
+            .canonicalize(conv_path(path))
+            .await
+            .map(PathBuf::from)
+            .map_err(io::Error::other)
     }
 
     async fn create_symlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
-        wrap_res(
-            self.sftp_session
-                .symlink(conv_path(source_path), conv_path(destination_path))
-                .await,
-        )
+        self.sftp_session
+            .symlink(conv_path(source_path), conv_path(destination_path))
+            .await
+            .map_err(io::Error::other)
     }
 
     async fn create_hard_link(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
-        match run_fs_command(
+        run_fs_command(
             self,
             format!("ln {} {}", conv_path(source_path), conv_path(destination_path)),
         )
         .await
-        {
-            Ok(_) => Ok(()),
-            Err(err) => Err(err),
-        }
+        .map(|_| ())
     }
 
     async fn read_link(&self, link_path: &Path) -> io::Result<PathBuf> {
-        match self.sftp_session.read_link(conv_path(link_path)).await {
-            Ok(string) => Ok(PathBuf::from(string)),
-            Err(err) => Err(io::Error::other(err)),
-        }
+        self.sftp_session
+            .read_link(conv_path(link_path))
+            .await
+            .map(PathBuf::from)
+            .map_err(io::Error::other)
     }
 
     async fn set_permissions(&self, path: &Path, permissions: Permissions) -> io::Result<()> {
-        wrap_res(
-            self.sftp_session
-                .set_metadata(
-                    conv_path(path),
-                    Metadata {
-                        size: None,
-                        uid: None,
-                        user: None,
-                        gid: None,
-                        group: None,
-                        permissions: Some(permissions.mode()),
-                        atime: None,
-                        mtime: None,
-                    },
-                )
-                .await,
-        )
+        self.sftp_session
+            .set_metadata(
+                conv_path(path),
+                Metadata {
+                    size: None,
+                    uid: None,
+                    user: None,
+                    gid: None,
+                    group: None,
+                    permissions: Some(permissions.mode()),
+                    atime: None,
+                    mtime: None,
+                },
+            )
+            .await
+            .map_err(io::Error::other)
     }
 
     async fn remove_file(&self, path: &Path) -> io::Result<()> {
-        wrap_res(self.sftp_session.remove_file(conv_path(path)).await)
+        self.sftp_session
+            .remove_file(conv_path(path))
+            .await
+            .map_err(io::Error::other)
     }
 
     async fn create_dir(&self, path: &Path) -> io::Result<()> {
-        wrap_res(self.sftp_session.create_dir(conv_path(path)).await)
+        self.sftp_session
+            .create_dir(conv_path(path))
+            .await
+            .map_err(io::Error::other)
     }
 
     async fn create_dir_recursively(&self, path: &Path) -> io::Result<()> {
@@ -171,10 +181,11 @@ where
     }
 
     async fn list_dir(&self, path: &Path) -> io::Result<Vec<LinuxDirEntry>> {
-        let read_dir = match self.sftp_session.read_dir(conv_path(path)).await {
-            Ok(res) => res,
-            Err(err) => return Err(io::Error::other(err)),
-        };
+        let read_dir = self
+            .sftp_session
+            .read_dir(conv_path(path))
+            .await
+            .map_err(io::Error::other)?;
         let entries = read_dir
             .map(|dir_entry| {
                 LinuxDirEntry::new(
@@ -189,33 +200,34 @@ where
     }
 
     async fn remove_dir(&self, path: &Path) -> io::Result<()> {
-        wrap_res(self.sftp_session.remove_dir(conv_path(path)).await)
+        self.sftp_session
+            .remove_dir(conv_path(path))
+            .await
+            .map_err(io::Error::other)
     }
 
     async fn remove_dir_recursively(&self, path: &Path) -> io::Result<()> {
-        let str_path = match path.to_str() {
-            Some(str_path) => str_path,
-            None => return Err(io::Error::other("could not convert path to str")),
-        };
+        let str_path = path
+            .to_str()
+            .ok_or(io::Error::other("could not convert &Path to str"))?;
 
-        match run_fs_command(self, format!("rm -r {}", str_path)).await {
-            Ok(_) => Ok(()),
-            Err(err) => Err(err),
-        }
+        run_fs_command(self, format!("rm -r {}", str_path)).await.map(|_| ())
     }
 
     async fn get_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata> {
-        match self.sftp_session.metadata(conv_path(path)).await {
-            Ok(attrs) => Ok(attrs.into()),
-            Err(err) => Err(io::Error::other(err)),
-        }
+        self.sftp_session
+            .metadata(conv_path(path))
+            .await
+            .map(|attrs| attrs.into())
+            .map_err(io::Error::other)
     }
 
     async fn get_symlink_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata> {
-        match self.sftp_session.symlink_metadata(conv_path(path)).await {
-            Ok(attrs) => Ok(attrs.into()),
-            Err(err) => Err(io::Error::other(err)),
-        }
+        self.sftp_session
+            .symlink_metadata(conv_path(path))
+            .await
+            .map(|attrs| attrs.into())
+            .map_err(io::Error::other)
     }
 }
 
@@ -234,7 +246,7 @@ async fn run_fs_command<T>(instance: &RusshLinux<T>, command: String) -> io::Res
 where
     T: RusshGlobalReceiver,
 {
-    let mut chan = instance.ssh_channel.lock().await;
+    let mut chan = instance.fs_ssh_channel.lock().await;
     let exec_result = chan.exec(true, command).await;
     if exec_result.is_err() {
         return Err(io::Error::other(exec_result.unwrap_err()));
@@ -255,13 +267,6 @@ where
     }
 
     Ok(code)
-}
-
-fn wrap_res<T>(result: Result<T, russh_sftp::client::error::Error>) -> io::Result<T> {
-    match result {
-        Ok(val) => Ok(val),
-        Err(err) => Err(io::Error::other(err)),
-    }
 }
 
 fn conv_path(path: &Path) -> String {

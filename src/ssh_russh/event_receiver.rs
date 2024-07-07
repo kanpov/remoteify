@@ -2,12 +2,12 @@ use std::collections::HashMap;
 
 use async_trait::async_trait;
 use russh::{
-    client::{self, Session},
+    client::{self, DisconnectReason, Session},
     ChannelId, Sig,
 };
 use russh_keys::key;
 
-use crate::terminal::{TerminalEvent, TerminalEventReceiver};
+use crate::terminal::{LinuxTerminalEvent, LinuxTerminalEventReceiver};
 
 #[async_trait]
 pub trait RusshGlobalReceiver: Send {
@@ -22,7 +22,7 @@ where
     R: RusshGlobalReceiver,
 {
     pub global_receiver: R,
-    pub terminal_receivers: HashMap<ChannelId, Box<dyn TerminalEventReceiver>>,
+    pub terminal_receivers: HashMap<ChannelId, Box<dyn LinuxTerminalEventReceiver>>,
 }
 
 #[async_trait]
@@ -37,11 +37,11 @@ where
     }
 
     async fn channel_eof(&mut self, channel: ChannelId, _session: &mut Session) -> Result<(), Self::Error> {
-        send_off(self, channel, TerminalEvent::EOFReceived).await
+        send_off(self, channel, LinuxTerminalEvent::EOFReceived).await
     }
 
     async fn data(&mut self, channel: ChannelId, data: &[u8], _session: &mut Session) -> Result<(), Self::Error> {
-        send_off(self, channel, TerminalEvent::DataReceived { data }).await
+        send_off(self, channel, LinuxTerminalEvent::DataReceived { data }).await
     }
 
     async fn extended_data(
@@ -54,7 +54,7 @@ where
         send_off(
             self,
             channel,
-            TerminalEvent::ExtendedDataReceived {
+            LinuxTerminalEvent::ExtendedDataReceived {
                 ext,
                 extended_data: data,
             },
@@ -71,7 +71,7 @@ where
         send_off(
             self,
             channel,
-            TerminalEvent::XonXoffAbilityReceived {
+            LinuxTerminalEvent::XonXoffAbilityReceived {
                 can_perform_xon_xoff: client_can_do,
             },
         )
@@ -84,7 +84,7 @@ where
         exit_status: u32,
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
-        send_off(self, channel, TerminalEvent::ProcessExited { exit_status }).await
+        send_off(self, channel, LinuxTerminalEvent::ProcessExitedNormally { exit_status }).await
     }
 
     async fn exit_signal(
@@ -99,7 +99,7 @@ where
         send_off(
             self,
             channel,
-            TerminalEvent::ProcessExitedAfterSignal {
+            LinuxTerminalEvent::ProcessExitedAfterSignal {
                 signal: &conv_sig_to_str(signal_name),
                 core_dumped,
                 error_message,
@@ -107,6 +107,22 @@ where
             },
         )
         .await
+    }
+
+    async fn window_adjusted(
+        &mut self,
+        channel: ChannelId,
+        new_size: u32,
+        _session: &mut Session,
+    ) -> Result<(), Self::Error> {
+        send_off(self, channel, LinuxTerminalEvent::WindowAdjusted { new_size }).await
+    }
+
+    async fn disconnected(&mut self, _reason: DisconnectReason<Self::Error>) -> Result<(), Self::Error> {
+        for receiver in self.terminal_receivers.values() {
+            receiver.receive_event(LinuxTerminalEvent::TerminalDisconnected).await;
+        }
+        Ok(())
     }
 }
 
@@ -131,7 +147,7 @@ fn conv_sig_to_str(sig: Sig) -> String {
 async fn send_off<'a, R>(
     delegating_handler: &mut DelegatingHandler<R>,
     channel: ChannelId,
-    terminal_event: TerminalEvent<'a>,
+    terminal_event: LinuxTerminalEvent<'a>,
 ) -> Result<(), russh::Error>
 where
     R: RusshGlobalReceiver,

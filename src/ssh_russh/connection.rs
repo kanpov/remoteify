@@ -13,7 +13,8 @@ use super::event_receiver::{DelegatingHandler, RusshGlobalReceiver};
 pub enum RusshConnectionError {
     ConnectionError(russh::Error),
     AuthenticationError(russh::Error),
-    ChannelOpenError(russh::Error),
+    SftpChannelOpenError(russh::Error),
+    SshChannelOpenError(russh::Error),
     SftpRequestError(russh::Error),
     SftpOpenError(russh_sftp::client::error::Error),
 }
@@ -43,7 +44,7 @@ where
     where
         R: 'static,
     {
-        let mut handle = match client::connect(
+        let mut handle = client::connect(
             Arc::new(connection_options.config),
             (connection_options.host, connection_options.port),
             DelegatingHandler {
@@ -52,10 +53,7 @@ where
             },
         )
         .await
-        {
-            Ok(handle) => handle,
-            Err(err) => return Err(RusshConnectionError::ConnectionError(err)),
-        };
+        .map_err(|err| RusshConnectionError::ConnectionError(err))?;
 
         match connection_options.authentication {
             RusshAuthentication::Password { password } => map_to_error::<R>(
@@ -73,29 +71,28 @@ where
             }
         }
 
-        let sftp_channel = match handle.channel_open_session().await {
-            Ok(channel) => channel,
-            Err(err) => return Err(RusshConnectionError::ChannelOpenError(err)),
-        };
+        let sftp_channel = handle
+            .channel_open_session()
+            .await
+            .map_err(|err| RusshConnectionError::SshChannelOpenError(err))?;
 
-        match sftp_channel.request_subsystem(true, "sftp").await {
-            Ok(_) => {}
-            Err(err) => return Err(RusshConnectionError::SftpRequestError(err)),
-        }
+        sftp_channel
+            .request_subsystem(true, "sftp")
+            .await
+            .map_err(|err| RusshConnectionError::SftpRequestError(err))?;
 
-        let sftp_session = match SftpSession::new(sftp_channel.into_stream()).await {
-            Ok(session) => session,
-            Err(err) => return Err(RusshConnectionError::SftpOpenError(err)),
-        };
+        let sftp_session = SftpSession::new(sftp_channel.into_stream())
+            .await
+            .map_err(|err| RusshConnectionError::SftpOpenError(err))?;
 
-        let ssh_channel = match handle.channel_open_session().await {
-            Ok(channel) => channel,
-            Err(err) => return Err(RusshConnectionError::ChannelOpenError(err)),
-        };
+        let fs_ssh_channel = handle
+            .channel_open_session()
+            .await
+            .map_err(|err| RusshConnectionError::SftpChannelOpenError(err))?;
 
         Ok(RusshLinux {
             handle: Arc::new(Mutex::new(handle)),
-            ssh_channel: Arc::new(Mutex::new(ssh_channel)),
+            fs_ssh_channel: Arc::new(Mutex::new(fs_ssh_channel)),
             sftp_session: Arc::new(sftp_session),
         })
     }

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
 #[derive(Debug, Clone, Copy)]
-pub enum TerminalEvent<'a> {
+pub enum LinuxTerminalEvent<'a> {
     EOFReceived,
     DataReceived {
         data: &'a [u8],
@@ -13,7 +13,7 @@ pub enum TerminalEvent<'a> {
     XonXoffAbilityReceived {
         can_perform_xon_xoff: bool,
     },
-    ProcessExited {
+    ProcessExitedNormally {
         exit_status: u32,
     },
     ProcessExitedAfterSignal {
@@ -29,6 +29,18 @@ pub enum TerminalEvent<'a> {
 }
 
 #[async_trait]
-pub trait TerminalEventReceiver: Send {
-    async fn receive_event(&self, terminal_event: TerminalEvent);
+pub trait LinuxTerminalEventReceiver: Send + Sync {
+    async fn receive_event(&self, terminal_event: LinuxTerminalEvent);
 }
+
+#[async_trait]
+pub trait LinuxTerminal {
+    fn supports_event_receiver() -> bool;
+
+    fn register_event_receiver(receiver: impl LinuxTerminalEventReceiver);
+
+    fn unregister_event_receiver();
+}
+
+#[async_trait]
+pub trait LinuxTerminalLauncher {}
