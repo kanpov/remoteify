@@ -48,7 +48,7 @@ where
         let mut handle = client::connect(
             Arc::new(connection_options.config),
             (connection_options.host, connection_options.port),
-            handler,
+            super::WrappingHandler { inner: handler },
         )
         .await
         .map_err(|err| RusshConnectionError::ConnectionError(err))?;
