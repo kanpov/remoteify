@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use russh::{client::Msg, Channel, ChannelId, ChannelMsg};
-use tokio::sync::Mutex;
+use russh::{client::Msg, Channel, ChannelId, ChannelMsg, Sig};
+use tokio::{io::AsyncWriteExt, sync::Mutex};
 
 use crate::terminal::{
     LinuxTerminal, LinuxTerminalError, LinuxTerminalEvent, LinuxTerminalEventReceiver, LinuxTerminalLauncher,
@@ -21,10 +21,6 @@ pub struct RusshLinuxTerminal {
 
 #[async_trait]
 impl LinuxTerminal for RusshLinuxTerminal {
-    fn supports_event_receiver(&self) -> bool {
-        true
-    }
-
     async fn register_event_receiver<R>(&self, receiver: R) -> Result<(), LinuxTerminalError>
     where
         R: LinuxTerminalEventReceiver + 'static,
@@ -59,6 +55,36 @@ impl LinuxTerminal for RusshLinuxTerminal {
     async fn run(&self, command: String) -> Result<(), LinuxTerminalError> {
         let channel = self.channel_mutex.lock().await;
         channel.exec(true, command).await.map_err(LinuxTerminalError::other)
+    }
+
+    async fn set_env_var(&self, name: String, value: String) -> Result<(), LinuxTerminalError> {
+        let channel = self.channel_mutex.lock().await;
+        channel
+            .set_env(true, name, value)
+            .await
+            .map_err(LinuxTerminalError::other)
+    }
+
+    async fn send_eof(&self) -> Result<(), LinuxTerminalError> {
+        let channel = self.channel_mutex.lock().await;
+        channel.eof().await.map_err(LinuxTerminalError::other)
+    }
+
+    async fn send_signal(&self, signal: String) -> Result<(), LinuxTerminalError> {
+        let channel = self.channel_mutex.lock().await;
+        channel
+            .signal(Sig::Custom(signal))
+            .await
+            .map_err(LinuxTerminalError::other)
+    }
+
+    async fn send_input(&self, input: &[u8], ext: Option<u32>) -> Result<(), LinuxTerminalError> {
+        let channel = self.channel_mutex.lock().await;
+        channel
+            .make_writer_ext(ext)
+            .write_all(input)
+            .await
+            .map_err(LinuxTerminalError::other)
     }
 
     async fn await_next_event(&self) -> Option<LinuxTerminalEvent> {

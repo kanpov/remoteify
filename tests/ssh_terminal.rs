@@ -11,12 +11,14 @@ async fn t() {
         .launch_terminal_noninteractive()
         .await
         .expect("Call failed");
-    terminal.run("cat --help".into()).await.unwrap();
+    terminal.run("echo q".into()).await.unwrap();
+    terminal.send_input(b"root123", None).await.unwrap();
+    terminal.send_eof().await.unwrap();
     loop {
         let event = terminal.await_next_event().await;
         match event {
-            Some(LinuxTerminalEvent::DataReceived { data }) => {
-                let output = String::from_utf8(data).unwrap();
+            Some(LinuxTerminalEvent::ExtendedDataReceived { extended_data, ext: _ }) => {
+                let output = String::from_utf8(extended_data).unwrap();
                 println!("{output}");
             }
             Some(ev) => {

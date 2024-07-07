@@ -35,7 +35,6 @@ pub enum LinuxTerminalEvent {
 #[derive(Debug, Clone)]
 pub enum LinuxTerminalError {
     DHSInternalProblem,
-    NotSupported,
     EventReceiverAlreadyExists,
     EventReceiverMissing,
     Other(Arc<Box<dyn Error>>),
@@ -57,23 +56,22 @@ pub trait LinuxTerminalEventReceiver: Send + Sync {
 
 #[async_trait]
 pub trait LinuxTerminal {
-    fn supports_event_receiver(&self) -> bool {
-        false
-    }
-
     #[allow(unused_variables)]
     async fn register_event_receiver<R>(&self, receiver: R) -> Result<(), LinuxTerminalError>
     where
-        R: LinuxTerminalEventReceiver + 'static,
-    {
-        Err(LinuxTerminalError::NotSupported)
-    }
+        R: LinuxTerminalEventReceiver + 'static;
 
-    async fn unregister_event_receiver(&self) -> Result<(), LinuxTerminalError> {
-        Err(LinuxTerminalError::NotSupported)
-    }
+    async fn unregister_event_receiver(&self) -> Result<(), LinuxTerminalError>;
 
     async fn run(&self, command: String) -> Result<(), LinuxTerminalError>;
+
+    async fn set_env_var(&self, name: String, value: String) -> Result<(), LinuxTerminalError>;
+
+    async fn send_eof(&self) -> Result<(), LinuxTerminalError>;
+
+    async fn send_signal(&self, signal: String) -> Result<(), LinuxTerminalError>;
+
+    async fn send_input(&self, input: &[u8], ext: Option<u32>) -> Result<(), LinuxTerminalError>;
 
     async fn await_next_event(&self) -> Option<LinuxTerminalEvent>;
 
