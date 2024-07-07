@@ -1,4 +1,4 @@
-use std::io;
+use std::{error::Error, sync::Arc};
 
 use async_trait::async_trait;
 
@@ -30,26 +30,50 @@ pub enum LinuxTerminalEvent<'a> {
     TerminalDisconnected,
 }
 
+pub enum LinuxTerminalError {
+    DHSInternalProblem,
+    EventReceiverNotSupported,
+    EventReceiverDuplicated,
+    EventReceiverMissing,
+    Other(Arc<Box<dyn Error>>),
+}
+
+impl LinuxTerminalError {
+    pub(crate) fn other<E>(error: E) -> LinuxTerminalError
+    where
+        E: Into<Box<dyn Error + Send + Sync>>,
+    {
+        LinuxTerminalError::Other(Arc::new(error.into()))
+    }
+}
+
 #[async_trait]
 pub trait LinuxTerminalEventReceiver: Send + Sync {
     async fn receive_event(&self, terminal_event: LinuxTerminalEvent);
 }
 
 #[async_trait]
-pub trait LinuxTerminal {
-    fn supports_event_receiver() -> bool {
+pub trait LinuxTerminal: Send + Sync {
+    fn supports_event_receiver(&self) -> bool {
         false
     }
 
     #[allow(unused_variables)]
-    fn register_event_receiver(receiver: impl LinuxTerminalEventReceiver) {}
+    async fn register_event_receiver<R>(&self, receiver: R) -> Result<(), LinuxTerminalError>
+    where
+        R: LinuxTerminalEventReceiver + 'static,
+    {
+        Err(LinuxTerminalError::EventReceiverNotSupported)
+    }
 
-    fn unregister_event_receiver() {}
+    async fn unregister_event_receiver(&self) -> Result<(), LinuxTerminalError> {
+        Err(LinuxTerminalError::EventReceiverNotSupported)
+    }
 }
 
 #[async_trait]
 pub trait LinuxTerminalLauncher {
-    async fn launch_terminal_noninteractive(&self) -> Result<impl LinuxTerminal, io::Error>;
+    async fn launch_terminal_noninteractive(&self) -> Result<impl LinuxTerminal, LinuxTerminalError>;
 
     async fn launch_terminal_interactive(
         &self,
@@ -58,5 +82,5 @@ pub trait LinuxTerminalLauncher {
         row_height: u32,
         pix_width: u32,
         pix_height: u32,
-    ) -> Result<impl LinuxTerminal, io::Error>;
+    ) -> Result<impl LinuxTerminal, LinuxTerminalError>;
 }

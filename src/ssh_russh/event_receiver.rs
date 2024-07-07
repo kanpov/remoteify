@@ -143,7 +143,7 @@ where
             .read()
             .await;
         for receiver in dhs_ref.values() {
-            receiver.receive_event(LinuxTerminalEvent::TerminalDisconnected);
+            receiver.receive_event(LinuxTerminalEvent::TerminalDisconnected).await;
         }
 
         Ok(())
