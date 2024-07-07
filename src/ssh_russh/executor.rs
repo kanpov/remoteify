@@ -140,26 +140,24 @@ async fn apply_process_configuration(
     channel: &mut Channel<Msg>,
     process_configuration: LinuxProcessConfiguration,
 ) -> Result<(), russh::Error> {
-    // 1. apply env vars
+    let mut env_string = String::new();
     for (key, value) in process_configuration.envs {
-        channel.set_env(true, key, value).await?;
+        env_string.push_str(format!("{}={} ", key, value).as_str());
     }
-    // 2. cd if necessary
-    if let Some(path) = process_configuration.working_dir {
-        channel.exec(true, format!("cd {}", path.to_str().unwrap())).await?;
-        loop {
-            match channel.wait().await {
-                None => break,
-                Some(_) => {}
-            }
-        }
-    }
-    // 3. construct full command
+
     let mut command = process_configuration.program;
     if process_configuration.args.len() > 0 {
         command += " ";
         command += process_configuration.args.join(" ").as_str();
     }
+    if env_string.len() > 0 {
+        command = env_string + command.as_str();
+    }
+
+    if let Some(path) = process_configuration.working_dir {
+        command = format!("(cd {} && {})", path.to_str().unwrap(), command);
+    }
+
     // 4. issue command
     channel.exec(true, command).await?;
 

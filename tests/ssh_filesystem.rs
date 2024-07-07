@@ -1,4 +1,8 @@
-use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::Path};
+use std::{
+    fs::Permissions,
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
+};
 
 use common::{conv_path, conv_path_non_buf, entries_contain, gen_nested_tmp_path, gen_tmp_path, TestData};
 use lhf::{
@@ -354,8 +358,9 @@ async fn t() {
     let o = test_data
         .implementation
         .execute(
-            LinuxProcessConfiguration::new("cat".into())
-                .arg("--help".into())
+            LinuxProcessConfiguration::new("pwd".into())
+                .env("A".into(), "B".into())
+                .working_dir(PathBuf::from("/etc"))
                 .clone(),
         )
         .await
