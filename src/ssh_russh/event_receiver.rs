@@ -1,11 +1,16 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{atomic::AtomicU16, Arc},
+};
 
 use async_trait::async_trait;
+use once_cell::sync::Lazy;
 use russh::{
     client::{self, DisconnectReason, Session},
     ChannelId, Sig,
 };
 use russh_keys::key;
+use tokio::sync::RwLock;
 
 use crate::terminal::{LinuxTerminalEvent, LinuxTerminalEventReceiver};
 
@@ -17,12 +22,24 @@ pub trait RusshGlobalReceiver: Send {
     }
 }
 
+// shared reference to the DHS
+pub(super) static DHS: Lazy<DelegatingHandlerStorage> = Lazy::new(|| DelegatingHandlerStorage {
+    hash_map: HashMap::new(),
+});
+// generator of IDs for the DHS
+pub(super) static DHS_ID_GEN: AtomicU16 = AtomicU16::new(0);
+
+// the DHS, mapping each RusshLinux to an rwlocked map of channel-ids to event receivers for those channels
+pub(super) struct DelegatingHandlerStorage {
+    pub hash_map: HashMap<u16, Arc<RwLock<HashMap<ChannelId, Box<dyn LinuxTerminalEventReceiver>>>>>,
+}
+
 pub(super) struct DelegatingHandler<R>
 where
     R: RusshGlobalReceiver,
 {
+    pub dhs_id: u16,
     pub global_receiver: R,
-    pub terminal_receivers: HashMap<ChannelId, Box<dyn LinuxTerminalEventReceiver>>,
 }
 
 #[async_trait]
@@ -119,9 +136,16 @@ where
     }
 
     async fn disconnected(&mut self, _reason: DisconnectReason<Self::Error>) -> Result<(), Self::Error> {
-        for receiver in self.terminal_receivers.values() {
-            receiver.receive_event(LinuxTerminalEvent::TerminalDisconnected).await;
+        let dhs_ref = DHS
+            .hash_map
+            .get(&self.dhs_id)
+            .ok_or(russh::Error::WrongChannel)?
+            .read()
+            .await;
+        for receiver in dhs_ref.values() {
+            receiver.receive_event(LinuxTerminalEvent::TerminalDisconnected);
         }
+
         Ok(())
     }
 }
@@ -152,7 +176,14 @@ async fn send_off<'a, R>(
 where
     R: RusshGlobalReceiver,
 {
-    if let Some(receiver) = delegating_handler.terminal_receivers.get(&channel) {
+    let dhs_ref = DHS
+        .hash_map
+        .get(&delegating_handler.dhs_id)
+        .ok_or(russh::Error::WrongChannel)?
+        .read()
+        .await;
+
+    if let Some(receiver) = dhs_ref.get(&channel) {
         receiver.receive_event(terminal_event).await;
     }
     Ok(())

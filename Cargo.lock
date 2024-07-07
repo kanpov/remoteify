@@ -1223,6 +1223,7 @@ name = "lhf"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "once_cell",
  "russh",
  "russh-keys",
  "russh-sftp",

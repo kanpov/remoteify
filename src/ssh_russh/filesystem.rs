@@ -246,7 +246,7 @@ async fn run_fs_command<T>(instance: &RusshLinux<T>, command: String) -> io::Res
 where
     T: RusshGlobalReceiver,
 {
-    let mut chan = instance.fs_ssh_channel.lock().await;
+    let mut chan = instance.fs_channel_mutex.lock().await;
     let exec_result = chan.exec(true, command).await;
     if exec_result.is_err() {
         return Err(io::Error::other(exec_result.unwrap_err()));

@@ -1,3 +1,5 @@
+use std::io;
+
 use async_trait::async_trait;
 
 #[derive(Debug, Clone, Copy)]
@@ -35,12 +37,26 @@ pub trait LinuxTerminalEventReceiver: Send + Sync {
 
 #[async_trait]
 pub trait LinuxTerminal {
-    fn supports_event_receiver() -> bool;
+    fn supports_event_receiver() -> bool {
+        false
+    }
 
-    fn register_event_receiver(receiver: impl LinuxTerminalEventReceiver);
+    #[allow(unused_variables)]
+    fn register_event_receiver(receiver: impl LinuxTerminalEventReceiver) {}
 
-    fn unregister_event_receiver();
+    fn unregister_event_receiver() {}
 }
 
 #[async_trait]
-pub trait LinuxTerminalLauncher {}
+pub trait LinuxTerminalLauncher {
+    async fn launch_terminal_noninteractive(&self) -> Result<impl LinuxTerminal, io::Error>;
+
+    async fn launch_terminal_interactive(
+        &self,
+        terminal: &str,
+        col_width: u32,
+        row_height: u32,
+        pix_width: u32,
+        pix_height: u32,
+    ) -> Result<impl LinuxTerminal, io::Error>;
+}
