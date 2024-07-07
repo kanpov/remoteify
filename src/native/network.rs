@@ -12,7 +12,7 @@ impl LinuxNetwork for NativeLinux {
         false
     }
 
-    async fn route_tcp_forward(&mut self, _host: &str, port: u32) -> io::Result<u32> {
+    async fn reverse_forward_tcp(&mut self, _host: &str, port: u32) -> io::Result<u32> {
         Ok(port)
     }
 }

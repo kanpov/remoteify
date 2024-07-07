@@ -10,6 +10,5 @@
 Implementation details:
 - Filesystem: Tokio "async" I/O on native and SFTP on SSH
 - Network: no-op on native and forwarding on SSH (`tcpip`, `streamlocal` extensions)
-- Terminal: not planned on native due to process restrictions, simple execution / requested PTY on SSH
 - Executor: Tokio async process on native and simple execution / requested PTY with less features on SSH
 - HTTP: reqwest on native and remote-side raw curl on SSH

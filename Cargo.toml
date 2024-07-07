@@ -6,7 +6,7 @@ description = "LHF (Linux Host Framework) is a set of contracts that allow using
 
 [dependencies]
 # api
-tokio = { version = "1.38.0", features = ["fs", "io-util"] }
+tokio = { version = "1.38.0", features = ["fs", "io-util", "process"] }
 async-trait = "0.1.80"
 # russh impl
 russh = { version = "0.43.0", optional = true }
