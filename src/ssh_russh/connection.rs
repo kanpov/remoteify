@@ -1,17 +1,18 @@
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 use russh::client;
 use russh_keys::key::KeyPair;
 use russh_sftp::client::SftpSession;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 
 use crate::ssh_russh::RusshLinux;
 
-use super::event_receiver::{DelegatingHandler, RusshGlobalReceiver};
-
 #[derive(Debug)]
-pub enum RusshConnectionError {
-    ConnectionError(russh::Error),
+pub enum RusshConnectionError<H>
+where
+    H: client::Handler,
+{
+    ConnectionError(H::Error),
     AuthenticationError(russh::Error),
     SftpChannelOpenError(russh::Error),
     SshChannelOpenError(russh::Error),
@@ -33,41 +34,38 @@ pub enum RusshAuthentication {
     None,
 }
 
-impl<R> RusshLinux<R>
+impl<H> RusshLinux<H>
 where
-    R: RusshGlobalReceiver,
+    H: client::Handler,
 {
     pub async fn connect(
-        event_receiver: R,
+        handler: H,
         connection_options: RusshConnectionOptions,
-    ) -> Result<RusshLinux<R>, RusshConnectionError>
+    ) -> Result<RusshLinux<H>, RusshConnectionError<H>>
     where
-        R: 'static,
+        H: 'static,
     {
         let mut handle = client::connect(
             Arc::new(connection_options.config),
             (connection_options.host, connection_options.port),
-            DelegatingHandler {
-                global_receiver: event_receiver,
-                channel_ids: Arc::new(RwLock::new(HashSet::new())),
-            },
+            handler,
         )
         .await
         .map_err(|err| RusshConnectionError::ConnectionError(err))?;
 
         match connection_options.authentication {
-            RusshAuthentication::Password { password } => map_to_error::<R>(
+            RusshAuthentication::Password { password } => map_to_error::<H>(
                 handle
                     .authenticate_password(connection_options.username, password)
                     .await,
             )?,
-            RusshAuthentication::PublicKey { key_pair } => map_to_error::<R>(
+            RusshAuthentication::PublicKey { key_pair } => map_to_error::<H>(
                 handle
                     .authenticate_publickey(connection_options.username, Arc::new(key_pair))
                     .await,
             )?,
             RusshAuthentication::None => {
-                map_to_error::<R>(handle.authenticate_none(connection_options.username).await)?
+                map_to_error::<H>(handle.authenticate_none(connection_options.username).await)?
             }
         }
 
@@ -98,9 +96,9 @@ where
     }
 }
 
-fn map_to_error<T>(result: Result<bool, russh::Error>) -> Result<(), RusshConnectionError>
+fn map_to_error<H>(result: Result<bool, russh::Error>) -> Result<(), RusshConnectionError<H>>
 where
-    T: RusshGlobalReceiver,
+    H: client::Handler,
 {
     result
         .map(|_| ())

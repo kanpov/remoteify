@@ -8,7 +8,6 @@ use lhf::{
     filesystem::{LinuxDirEntry, LinuxFileType},
     ssh_russh::{
         connection::{RusshAuthentication, RusshConnectionOptions},
-        event_receiver::RusshGlobalReceiver,
         RusshLinux,
     },
 };
@@ -41,7 +40,7 @@ static CONTAINER_PORT_CELL: OnceCell<u16> = OnceCell::const_new();
 pub struct TestData {
     pub ssh: Channel<Msg>,
     pub sftp: SftpSession,
-    pub implementation: RusshLinux<ApiHandler>,
+    pub implementation: RusshLinux<AcceptingHandler>,
 }
 
 impl TestData {
@@ -63,9 +62,15 @@ impl TestData {
             })
             .await;
 
-        let mut handle_option: Option<Handle<ActualHandler>> = None;
+        let mut handle_option: Option<Handle<AcceptingHandler>> = None;
         loop {
-            match client::connect(Arc::new(Config::default()), ("localhost", *ssh_port), ActualHandler {}).await {
+            match client::connect(
+                Arc::new(Config::default()),
+                ("localhost", *ssh_port),
+                AcceptingHandler {},
+            )
+            .await
+            {
                 Ok(handle) => {
                     handle_option = Some(handle);
                     break;
@@ -91,11 +96,11 @@ impl TestData {
         let sftp_session = SftpSession::new(sftp_chan.into_stream())
             .await
             .expect("Could not open SFTP session");
-        let mut impl_option: Option<RusshLinux<ApiHandler>> = None;
+        let mut impl_option: Option<RusshLinux<AcceptingHandler>> = None;
 
         loop {
             if let Ok(implementation) = RusshLinux::connect(
-                ApiHandler {},
+                AcceptingHandler {},
                 RusshConnectionOptions {
                     host: "localhost".into(),
                     port: *ssh_port,
@@ -155,14 +160,10 @@ pub fn entries_contain(entries: &Vec<LinuxDirEntry>, expected_type: LinuxFileTyp
 }
 
 #[derive(Debug)]
-pub struct ActualHandler {}
-
-pub struct ApiHandler {}
-
-impl RusshGlobalReceiver for ApiHandler {}
+pub struct AcceptingHandler {}
 
 #[async_trait]
-impl client::Handler for ActualHandler {
+impl client::Handler for AcceptingHandler {
     type Error = russh::Error;
 
     async fn check_server_key(&mut self, _server_public_key: &PublicKey) -> Result<bool, Self::Error> {

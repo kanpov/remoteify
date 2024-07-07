@@ -4,7 +4,6 @@
 |------------|------------------------------------------------|--------|-------|
 | Filesystem | Access to the Linux filesystem                 | ✅      | ✅     |
 | Network    | Access to forwarding TCP and Unix sockets      | ✅      | 🚧    |
-| Terminal   | Reactive and async access to Linux terminals   | ❌      | ✅     |
 | Executor   | A simple model for executing Linux programs    | 🚧     | 🚧    |
 | HTTP       | Async HTTP client on Linux and not the host OS | 🚧     | 🚧    |
 

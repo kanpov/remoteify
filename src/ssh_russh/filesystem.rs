@@ -5,7 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use russh::ChannelMsg;
+use russh::{client, ChannelMsg};
 use russh_sftp::{
     client::fs::{File, Metadata},
     protocol::{FileAttributes, FileType, OpenFlags},
@@ -14,12 +14,12 @@ use std::io::{self};
 
 use crate::filesystem::{LinuxDirEntry, LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions};
 
-use super::{event_receiver::RusshGlobalReceiver, RusshLinux};
+use super::RusshLinux;
 
 #[async_trait]
-impl<R> LinuxFilesystem for RusshLinux<R>
+impl<H> LinuxFilesystem for RusshLinux<H>
 where
-    R: RusshGlobalReceiver,
+    H: client::Handler,
 {
     async fn exists(&self, path: &Path) -> io::Result<bool> {
         self.sftp_session
@@ -242,9 +242,9 @@ impl From<FileType> for LinuxFileType {
     }
 }
 
-async fn run_fs_command<T>(instance: &RusshLinux<T>, command: String) -> io::Result<Option<u32>>
+async fn run_fs_command<H>(instance: &RusshLinux<H>, command: String) -> io::Result<Option<u32>>
 where
-    T: RusshGlobalReceiver,
+    H: client::Handler,
 {
     let mut chan = instance.fs_channel_mutex.lock().await;
     let exec_result = chan.exec(true, command).await;
