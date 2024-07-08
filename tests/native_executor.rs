@@ -14,8 +14,9 @@ async fn t() {
     config.redirect_stdout();
     config.redirect_stdin();
 
-    let proc = IMPL.begin_execute(&config).await.expect("Failed to execute");
-    let output = proc.await_exit_with_output().await.unwrap();
-    let stdout_str = String::from_utf8_lossy(&output.stdout);
-    println!("{stdout_str}");
+    let mut proc = IMPL.begin_execute(&config).await.expect("Failed to execute");
+    proc.await_exit().await.unwrap();
+    let po = proc.get_partial_output().unwrap();
+    let stdout_str = String::from_utf8(po.stdout.unwrap()).unwrap();
+    print!("{stdout_str}");
 }

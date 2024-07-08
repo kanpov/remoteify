@@ -1,27 +1,39 @@
 use std::{
     collections::HashMap,
     process::{Output, Stdio},
+    sync::{Arc, RwLock},
 };
 
 use async_trait::async_trait;
+use bytes::BytesMut;
+use once_cell::sync::Lazy;
 use tokio::{
-    io::AsyncWriteExt,
-    process::{Child, ChildStdin, Command},
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines},
+    process::{Child, ChildStderr, ChildStdin, ChildStdout, Command},
 };
 
-use crate::executor::{LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError, LinuxProcessOutput};
+use crate::executor::{
+    LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError, LinuxProcessOutput,
+    LinuxProcessPartialOutput,
+};
 
 use super::NativeLinux;
+
+static STDOUT_BUFFERS: Lazy<Arc<RwLock<HashMap<u32, BytesMut>>>> = Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+static STDERR_BUFFERS: Lazy<Arc<RwLock<HashMap<u32, BytesMut>>>> = Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
 
 pub struct NativeLinuxProcess {
     child: Child,
     stdin: Option<ChildStdin>,
+    stdout_piped: bool,
+    stderr_piped: bool,
+    pid: Option<u32>,
 }
 
 #[async_trait]
 impl<'a> LinuxProcess for NativeLinuxProcess {
     fn id(&self) -> Option<u32> {
-        self.child.id()
+        self.pid
     }
 
     async fn write_to_stdin(&mut self, data: &[u8]) -> Result<usize, LinuxProcessError> {
@@ -37,6 +49,30 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
             }
             None => Err(LinuxProcessError::StdinNotPiped),
         }
+    }
+
+    fn get_partial_output(&self) -> Result<LinuxProcessPartialOutput, LinuxProcessError> {
+        let pid = self.pid.ok_or(LinuxProcessError::ProcessIdNotFound)?;
+        let mut stdout: Option<Vec<u8>> = None;
+        let mut stderr: Option<Vec<u8>> = None;
+
+        if self.stdout_piped {
+            if let Some(buf) = STDOUT_BUFFERS.read().expect("Stdout rwlock was poisoned!").get(&pid) {
+                stdout = Some(buf.to_vec());
+            }
+        }
+
+        if self.stderr_piped {
+            if let Some(buf) = STDERR_BUFFERS.read().expect("Stderr rwlock was poisoned!").get(&pid) {
+                stderr = Some(buf.to_vec());
+            }
+        }
+
+        Ok(LinuxProcessPartialOutput {
+            stdout,
+            stderr,
+            stdout_extended: HashMap::new(),
+        })
     }
 
     async fn await_exit_with_output(self) -> Result<LinuxProcessOutput, LinuxProcessError> {
@@ -66,8 +102,35 @@ impl LinuxExecutor for NativeLinux {
         let mut command = create_command_from_config(process_configuration);
         let mut child = command.spawn().map_err(LinuxProcessError::IO)?;
         let stdin = child.stdin.take();
+        let pid = child.id();
 
-        Ok(NativeLinuxProcess { child, stdin })
+        if let Some(pid) = pid {
+            if !process_configuration.disable_extra_reads {
+                if process_configuration.redirect_stdout {
+                    STDOUT_BUFFERS
+                        .write()
+                        .expect("Stdout rwlock was poisoned!")
+                        .insert(pid, BytesMut::new());
+                    queue_capturer(&mut child, false);
+                }
+
+                if process_configuration.redirect_stderr {
+                    STDERR_BUFFERS
+                        .write()
+                        .expect("Stderr rwlock was poisoned!")
+                        .insert(pid, BytesMut::new());
+                    queue_capturer(&mut child, true)
+                }
+            }
+        }
+
+        Ok(NativeLinuxProcess {
+            child,
+            stdin,
+            stdout_piped: process_configuration.redirect_stdout,
+            stderr_piped: process_configuration.redirect_stderr,
+            pid,
+        })
     }
 
     async fn execute(
@@ -83,12 +146,58 @@ impl LinuxExecutor for NativeLinux {
 impl From<Output> for LinuxProcessOutput {
     fn from(value: Output) -> Self {
         LinuxProcessOutput {
-            stdout: value.stdout,
-            stderr: value.stderr,
+            stdout: Some(value.stdout),
+            stderr: Some(value.stderr),
             stdout_extended: HashMap::new(), // extended doesn't exist on native
             status_code: value.status.code().map(|i| i.into()),
         }
     }
+}
+
+fn queue_capturer(child: &mut Child, is_stderr: bool) {
+    let pid = child.id().expect("Child has no PID!");
+    let mut stdout: Option<ChildStdout> = None;
+    let mut stderr: Option<ChildStderr> = None;
+
+    if is_stderr {
+        stderr = child.stderr.take();
+    } else {
+        stdout = child.stdout.take();
+    }
+
+    tokio::spawn(async move {
+        let mut stdout_reader: Option<Lines<BufReader<ChildStdout>>> = None;
+        let mut stderr_reader: Option<Lines<BufReader<ChildStderr>>> = None;
+
+        if is_stderr {
+            stderr_reader = Some(BufReader::new(stderr.unwrap()).lines());
+        } else {
+            stdout_reader = Some(BufReader::new(stdout.unwrap()).lines());
+        }
+
+        loop {
+            let line_result = match is_stderr {
+                true => stderr_reader.as_mut().unwrap().next_line().await,
+                false => stdout_reader.as_mut().unwrap().next_line().await,
+            };
+            let line = match line_result {
+                Ok(Some(line)) => line,
+                Ok(None) => break,
+                Err(_) => break,
+            };
+
+            let mut write_ref = STDOUT_BUFFERS.write().expect("Stdout rwlock was poisoned!");
+            match write_ref.get_mut(&pid) {
+                Some(buf) => {
+                    buf.extend(line.as_bytes());
+                    buf.extend(b"\n");
+                }
+                None => break,
+            };
+        }
+
+        ()
+    });
 }
 
 fn create_command_from_config(process_configuration: &LinuxProcessConfiguration) -> Command {

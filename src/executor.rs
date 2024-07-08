@@ -11,6 +11,7 @@ pub struct LinuxProcessConfiguration {
     pub(crate) redirect_stdout: bool,
     pub(crate) redirect_stdin: bool,
     pub(crate) redirect_stderr: bool,
+    pub(crate) disable_extra_reads: bool,
     pub(crate) user_id: Option<u32>,
     pub(crate) group_id: Option<u32>,
     pub(crate) process_group_id: Option<u32>,
@@ -26,6 +27,7 @@ impl LinuxProcessConfiguration {
             redirect_stdout: false,
             redirect_stdin: false,
             redirect_stderr: false,
+            disable_extra_reads: false,
             user_id: None,
             group_id: None,
             process_group_id: None,
@@ -77,6 +79,11 @@ impl LinuxProcessConfiguration {
         self
     }
 
+    pub fn disable_extra_reads(&mut self) -> &mut Self {
+        self.disable_extra_reads = true;
+        self
+    }
+
     pub fn user_id(&mut self, user_id: u32) -> &mut Self {
         self.user_id = Some(user_id);
         self
@@ -107,10 +114,17 @@ pub enum LinuxProcessError {
 
 #[derive(Debug, Clone)]
 pub struct LinuxProcessOutput {
-    pub stdout: Vec<u8>,
-    pub stderr: Vec<u8>,
+    pub stdout: Option<Vec<u8>>,
+    pub stderr: Option<Vec<u8>>,
     pub stdout_extended: HashMap<u32, Vec<u8>>,
     pub status_code: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct LinuxProcessPartialOutput {
+    pub stdout: Option<Vec<u8>>,
+    pub stderr: Option<Vec<u8>>,
+    pub stdout_extended: HashMap<u32, Vec<u8>>,
 }
 
 #[async_trait]
@@ -120,6 +134,8 @@ pub trait LinuxProcess: Sized {
     async fn write_to_stdin(&mut self, data: &[u8]) -> Result<usize, LinuxProcessError>;
 
     async fn close_stdin(&mut self) -> Result<(), LinuxProcessError>;
+
+    fn get_partial_output(&self) -> Result<LinuxProcessPartialOutput, LinuxProcessError>;
 
     async fn await_exit(&mut self) -> Result<Option<i64>, LinuxProcessError>;
 

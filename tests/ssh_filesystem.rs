@@ -359,6 +359,6 @@ async fn t() {
     proc.write_to_stdin(b" ; exit").await.unwrap();
     proc.close_stdin().await.unwrap();
     let output = proc.await_exit_with_output().await.unwrap();
-    let stderr = String::from_utf8(output.stderr).unwrap();
+    let stderr = String::from_utf8(output.stderr.unwrap()).unwrap();
     println!("{stderr}");
 }
