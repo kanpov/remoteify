@@ -8,7 +8,7 @@ use lhf::{
     filesystem::{LinuxDirEntry, LinuxFileType},
     ssh_russh::{
         connection::{RusshAuthentication, RusshConnectionOptions},
-        RusshLinux,
+        RusshLinux, RusshPtyOptions,
     },
 };
 use russh::{
@@ -25,6 +25,7 @@ pub fn gen_tmp_path() -> PathBuf {
     PathBuf::from(format!("/tmp/{}", Uuid::new_v4().to_string()))
 }
 
+#[allow(unused)]
 pub fn gen_nested_tmp_path() -> PathBuf {
     PathBuf::from(format!(
         "/tmp/{}/{}",
@@ -109,6 +110,14 @@ impl TestData {
                     authentication: RusshAuthentication::Password {
                         password: "root123".into(),
                     },
+                },
+                RusshPtyOptions {
+                    terminal: "bash".into(),
+                    col_width: 1000,
+                    row_height: 1000,
+                    pix_width: 0,
+                    pix_height: 0,
+                    terminal_modes: Vec::new(),
                 },
             )
             .await

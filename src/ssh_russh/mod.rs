@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use executor::EXECUTOR_BUFFERS;
 use russh::{
     client::{self, DisconnectReason, Msg, Session},
-    Channel, ChannelId, ChannelOpenFailure, Sig,
+    Channel, ChannelId, ChannelOpenFailure, Pty, Sig,
 };
 use russh_keys::key::PublicKey;
 use tokio::sync::Mutex;
@@ -18,9 +18,20 @@ pub struct RusshLinux<H>
 where
     H: client::Handler,
 {
+    pty_options: RusshPtyOptions,
     handle_mutex: Arc<Mutex<client::Handle<WrappingHandler<H>>>>,
     fs_channel_mutex: Arc<Mutex<Channel<Msg>>>,
     sftp_session: Arc<russh_sftp::client::SftpSession>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RusshPtyOptions {
+    pub terminal: String,
+    pub col_width: u32,
+    pub row_height: u32,
+    pub pix_width: u32,
+    pub pix_height: u32,
+    pub terminal_modes: Vec<(Pty, u32)>,
 }
 
 pub(super) struct WrappingHandler<H>

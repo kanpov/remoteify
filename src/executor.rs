@@ -9,6 +9,7 @@ pub struct LinuxProcessConfiguration {
     pub(crate) envs: HashMap<String, String>,
     pub(crate) working_dir: Option<PathBuf>,
     pub(crate) redirect_stdout: bool,
+    pub(crate) redirect_stdin: bool,
     pub(crate) redirect_stderr: bool,
     pub(crate) user_id: Option<u32>,
     pub(crate) group_id: Option<u32>,
@@ -16,13 +17,14 @@ pub struct LinuxProcessConfiguration {
 }
 
 impl LinuxProcessConfiguration {
-    pub fn new(program: String) -> LinuxProcessConfiguration {
+    pub fn new(program: impl Into<String>) -> LinuxProcessConfiguration {
         LinuxProcessConfiguration {
-            program,
+            program: program.into(),
             args: Vec::new(),
             envs: HashMap::new(),
             working_dir: None,
             redirect_stdout: false,
+            redirect_stdin: false,
             redirect_stderr: false,
             user_id: None,
             group_id: None,
@@ -30,8 +32,8 @@ impl LinuxProcessConfiguration {
         }
     }
 
-    pub fn arg(&mut self, argument: String) -> &mut Self {
-        self.args.push(argument);
+    pub fn arg(&mut self, argument: impl Into<String>) -> &mut Self {
+        self.args.push(argument.into());
         self
     }
 
@@ -40,8 +42,8 @@ impl LinuxProcessConfiguration {
         self
     }
 
-    pub fn env(&mut self, key: String, value: String) -> &mut Self {
-        self.envs.insert(key, value);
+    pub fn env(&mut self, key: impl Into<String>, value: impl Into<String>) -> &mut Self {
+        self.envs.insert(key.into(), value.into());
         self
     }
 
@@ -55,13 +57,18 @@ impl LinuxProcessConfiguration {
         self
     }
 
-    pub fn working_dir(&mut self, working_dir: PathBuf) -> &mut Self {
-        self.working_dir = Some(working_dir);
+    pub fn working_dir(&mut self, working_dir: impl Into<PathBuf>) -> &mut Self {
+        self.working_dir = Some(working_dir.into());
         self
     }
 
     pub fn redirect_stdout(&mut self) -> &mut Self {
         self.redirect_stdout = true;
+        self
+    }
+
+    pub fn redirect_stdin(&mut self) -> &mut Self {
+        self.redirect_stdin = true;
         self
     }
 
@@ -88,7 +95,9 @@ impl LinuxProcessConfiguration {
 
 #[derive(Debug)]
 pub enum LinuxProcessError {
-    UnsupportedOperation,
+    NotSupportedByImplementation,
+    ProcessIdNotFound,
+    StdinNotPiped,
     IO(std::io::Error),
     CouldNotAcquireStream,
     Other(Box<dyn std::error::Error>),
@@ -105,6 +114,10 @@ pub struct LinuxProcessOutput {
 pub trait LinuxProcess {
     fn id(&self) -> Option<u32>;
 
+    async fn write_to_stdin(&mut self, data: &[u8]) -> Result<(), LinuxProcessError>;
+
+    async fn write_eof(&mut self) -> Result<(), LinuxProcessError>;
+
     async fn await_exit(&mut self) -> Result<Option<i64>, LinuxProcessError>;
 
     async fn await_exit_with_output(mut self) -> Result<LinuxProcessOutput, LinuxProcessError>;
@@ -116,11 +129,11 @@ pub trait LinuxProcess {
 pub trait LinuxExecutor {
     async fn begin_execute(
         &self,
-        process_configuration: LinuxProcessConfiguration,
+        process_configuration: &LinuxProcessConfiguration,
     ) -> Result<impl LinuxProcess, LinuxProcessError>;
 
     async fn execute(
         &self,
-        process_configuration: LinuxProcessConfiguration,
+        process_configuration: &LinuxProcessConfiguration,
     ) -> Result<LinuxProcessOutput, LinuxProcessError>;
 }

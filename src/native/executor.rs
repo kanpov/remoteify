@@ -1,7 +1,14 @@
 use std::process::{Output, Stdio};
 
 use async_trait::async_trait;
-use tokio::process::{Child, Command};
+use nix::{
+    sys::signal::{self, Signal},
+    unistd::Pid,
+};
+use tokio::{
+    io::AsyncWriteExt,
+    process::{Child, Command},
+};
 
 use crate::executor::{LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError, LinuxProcessOutput};
 
@@ -15,6 +22,19 @@ pub struct NativeLinuxProcess {
 impl LinuxProcess for NativeLinuxProcess {
     fn id(&self) -> Option<u32> {
         self.child.id()
+    }
+
+    async fn write_to_stdin(&mut self, data: &[u8]) -> Result<(), LinuxProcessError> {
+        let stdin = match &mut self.child.stdin {
+            Some(stdin) => stdin,
+            None => return Err(LinuxProcessError::StdinNotPiped),
+        };
+        stdin.write(data).await.map(|_| ()).map_err(LinuxProcessError::IO)
+    }
+
+    async fn write_eof(&mut self) -> Result<(), LinuxProcessError> {
+        let pid = self.child.id().ok_or(LinuxProcessError::ProcessIdNotFound)? as i32;
+        signal::kill(Pid::from_raw(pid), Signal::SIGQUIT).map_err(|err| LinuxProcessError::Other(Box::new(err)))
     }
 
     async fn await_exit_with_output(self) -> Result<LinuxProcessOutput, LinuxProcessError> {
@@ -39,7 +59,7 @@ impl LinuxProcess for NativeLinuxProcess {
 impl LinuxExecutor for NativeLinux {
     async fn begin_execute(
         &self,
-        process_configuration: LinuxProcessConfiguration,
+        process_configuration: &LinuxProcessConfiguration,
     ) -> Result<NativeLinuxProcess, LinuxProcessError> {
         let mut command = create_command_from_config(process_configuration);
         let child = command.spawn().map_err(LinuxProcessError::IO)?;
@@ -48,7 +68,7 @@ impl LinuxExecutor for NativeLinux {
 
     async fn execute(
         &self,
-        process_configuration: LinuxProcessConfiguration,
+        process_configuration: &LinuxProcessConfiguration,
     ) -> Result<LinuxProcessOutput, LinuxProcessError> {
         let mut command = create_command_from_config(process_configuration);
         let os_output = command.output().await.map_err(LinuxProcessError::IO)?;
@@ -66,12 +86,12 @@ impl From<Output> for LinuxProcessOutput {
     }
 }
 
-fn create_command_from_config(process_configuration: LinuxProcessConfiguration) -> Command {
-    let mut command = Command::new(process_configuration.program);
-    command.args(process_configuration.args);
-    command.envs(process_configuration.envs);
+fn create_command_from_config(process_configuration: &LinuxProcessConfiguration) -> Command {
+    let mut command = Command::new(&process_configuration.program);
+    command.args(&process_configuration.args);
+    command.envs(&process_configuration.envs);
 
-    if let Some(working_dir) = process_configuration.working_dir {
+    if let Some(working_dir) = &process_configuration.working_dir {
         command.current_dir(working_dir);
     }
 
@@ -87,7 +107,11 @@ fn create_command_from_config(process_configuration: LinuxProcessConfiguration) 
         command.stderr(Stdio::null());
     }
 
-    command.stdin(Stdio::null());
+    if process_configuration.redirect_stdin {
+        command.stdin(Stdio::piped());
+    } else {
+        command.stdin(Stdio::null());
+    }
 
     if let Some(uid) = process_configuration.user_id {
         command.uid(uid);

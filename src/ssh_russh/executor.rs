@@ -47,6 +47,25 @@ impl LinuxProcess for RusshLinuxProcess {
         Ok(status_code)
     }
 
+    async fn write_to_stdin(&mut self, data: &[u8]) -> Result<(), LinuxProcessError> {
+        let channel = self.channel_mutex.lock().await;
+        channel
+            .data(data)
+            .await
+            .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
+
+        Ok(())
+    }
+
+    async fn write_eof(&mut self) -> Result<(), LinuxProcessError> {
+        let channel = self.channel_mutex.lock().await;
+        channel
+            .eof()
+            .await
+            .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
+        Ok(())
+    }
+
     async fn await_exit_with_output(mut self) -> Result<LinuxProcessOutput, LinuxProcessError> {
         let status_code = self.await_exit().await?;
         let stdout: Vec<u8> = match EXECUTOR_BUFFERS
@@ -82,7 +101,7 @@ where
 {
     async fn begin_execute(
         &self,
-        process_configuration: LinuxProcessConfiguration,
+        process_configuration: &LinuxProcessConfiguration,
     ) -> Result<RusshLinuxProcess, LinuxProcessError> {
         let handle = self.handle_mutex.lock().await;
         let mut channel = handle
@@ -97,6 +116,21 @@ where
             .expect("Executor buffers RWLock was poisoned!")
             .insert(channel.id(), BytesMut::new());
 
+        if process_configuration.redirect_stdin {
+            channel
+                .request_pty(
+                    false,
+                    &self.pty_options.terminal,
+                    self.pty_options.col_width,
+                    self.pty_options.row_height,
+                    self.pty_options.pix_width,
+                    self.pty_options.pix_height,
+                    &self.pty_options.terminal_modes,
+                )
+                .await
+                .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
+        }
+
         Ok(RusshLinuxProcess {
             channel_id: channel.id(),
             channel_mutex: Arc::new(Mutex::new(channel)),
@@ -105,7 +139,7 @@ where
 
     async fn execute(
         &self,
-        process_configuration: LinuxProcessConfiguration,
+        process_configuration: &LinuxProcessConfiguration,
     ) -> Result<LinuxProcessOutput, LinuxProcessError> {
         let process = self.begin_execute(process_configuration).await?;
         let mut channel = process.channel_mutex.lock().await;
@@ -138,14 +172,14 @@ where
 
 async fn apply_process_configuration(
     channel: &mut Channel<Msg>,
-    process_configuration: LinuxProcessConfiguration,
+    process_configuration: &LinuxProcessConfiguration,
 ) -> Result<(), russh::Error> {
     let mut env_string = String::new();
-    for (key, value) in process_configuration.envs {
+    for (key, value) in &process_configuration.envs {
         env_string.push_str(format!("{}={} ", key, value).as_str());
     }
 
-    let mut command = process_configuration.program;
+    let mut command = process_configuration.program.clone();
     if process_configuration.args.len() > 0 {
         command += " ";
         command += process_configuration.args.join(" ").as_str();
@@ -154,7 +188,7 @@ async fn apply_process_configuration(
         command = env_string + command.as_str();
     }
 
-    if let Some(path) = process_configuration.working_dir {
+    if let Some(path) = &process_configuration.working_dir {
         command = format!("(cd {} && {})", path.to_str().unwrap(), command);
     }
 

@@ -1,5 +1,5 @@
 use lhf::{
-    executor::{LinuxExecutor, LinuxProcessConfiguration},
+    executor::{LinuxExecutor, LinuxProcess, LinuxProcessConfiguration},
     native::NativeLinux,
 };
 
@@ -9,14 +9,19 @@ static IMPL: NativeLinux = NativeLinux {};
 
 #[tokio::test]
 async fn t() {
-    let config = LinuxProcessConfiguration::new("/usr/bin/cat".into())
-        .arg("--help".into())
-        .redirect_stdout()
-        .redirect_stderr()
-        .clone();
-    let received_output = IMPL.execute(config).await.expect("Failed to execute");
-    let stdout = String::from_utf8(received_output.stdout).unwrap();
+    let mut config = LinuxProcessConfiguration::new("/usr/bin/sudo");
+    config.arg("-S");
+    config.arg("dd");
+    config.arg("--help");
+    config.redirect_stdout();
+    config.redirect_stdin();
+
+    let mut proc = IMPL.begin_execute(&config).await.expect("Failed to execute");
+    proc.write_to_stdin(b"495762").await.expect("Failed stdin write");
+    let output = proc
+        .await_exit_with_output()
+        .await
+        .expect("Timed out waiting for exit likely");
+    let stdout = String::from_utf8_lossy(&output.stdout);
     println!("{stdout}");
-    dbg!(received_output.stderr);
-    dbg!(received_output.status_code);
 }

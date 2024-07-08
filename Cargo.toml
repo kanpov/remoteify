@@ -8,6 +8,8 @@ description = "LHF (Linux Host Framework) is a set of contracts that allow using
 # api
 tokio = { version = "1.38.0", features = ["fs", "io-util", "process"] }
 async-trait = "0.1.80"
+# native impl
+nix = { version = "0.29.0", optional = true, features = ["signal"] }
 # russh impl
 russh = { version = "0.43.0", optional = true }
 russh-keys = { version = "0.43.0", optional = true }
@@ -22,7 +24,7 @@ testcontainers = "0.20.0"
 
 [features]
 default = ["native", "ssh_russh"]
-native = []
+native = ["dep:nix"]
 ssh_russh = [
     "dep:russh",
     "dep:russh-keys",

@@ -7,6 +7,8 @@ use tokio::sync::Mutex;
 
 use crate::ssh_russh::RusshLinux;
 
+use super::RusshPtyOptions;
+
 #[derive(Debug)]
 pub enum RusshConnectionError<H>
 where
@@ -41,6 +43,7 @@ where
     pub async fn connect(
         handler: H,
         connection_options: RusshConnectionOptions,
+        pty_options: RusshPtyOptions,
     ) -> Result<RusshLinux<H>, RusshConnectionError<H>>
     where
         H: 'static,
@@ -89,6 +92,7 @@ where
             .map_err(|err| RusshConnectionError::SftpChannelOpenError(err))?;
 
         Ok(RusshLinux {
+            pty_options,
             handle_mutex: Arc::new(Mutex::new(handle)),
             fs_channel_mutex: Arc::new(Mutex::new(fs_ssh_channel)),
             sftp_session: Arc::new(sftp_session),
