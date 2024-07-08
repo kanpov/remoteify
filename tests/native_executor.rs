@@ -1,4 +1,4 @@
-use lhf::{
+use remoteify::{
     executor::{LinuxExecutor, LinuxProcess, LinuxProcessConfiguration},
     native::NativeLinux,
 };

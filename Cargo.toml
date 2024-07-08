@@ -1,8 +1,8 @@
 [package]
-name = "lhf"
+name = "remoteify"
 version = "0.1.0"
 edition = "2021"
-description = "LHF (Linux Host Framework) is a set of contracts that allow using libraries that depend on Linux on other environments"
+description = "Remoteify allows you to adapt Rust Linux libraries to both native and remote usage effortlessly"
 
 [dependencies]
 # api

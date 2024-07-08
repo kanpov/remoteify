@@ -5,7 +5,7 @@ use std::{
 };
 
 use common::{entries_contain, gen_nested_tmp_path, gen_tmp_path};
-use lhf::{
+use remoteify::{
     filesystem::{LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions},
     native::NativeLinux,
 };
