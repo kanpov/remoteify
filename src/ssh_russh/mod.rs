@@ -6,7 +6,7 @@ mod network;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use executor::EXECUTOR_BUFFERS;
+use executor::{StdextEntry, STDERR_BUFFERS, STDEXT_BUFFERS, STDOUT_BUFFERS};
 use russh::{
     client::{self, DisconnectReason, Msg, Session},
     Channel, ChannelId, ChannelOpenFailure, Pty, Sig,
@@ -175,9 +175,9 @@ where
 
     #[allow(unused_variables)]
     async fn data(&mut self, channel: ChannelId, data: &[u8], session: &mut Session) -> Result<(), Self::Error> {
-        if let Some(buf) = EXECUTOR_BUFFERS
+        if let Some(buf) = STDOUT_BUFFERS
             .write()
-            .expect("Executor buffers RWLock poisoned!")
+            .expect("Stdout rwlock was poisoned!")
             .get_mut(&channel)
         {
             buf.extend(data);
@@ -193,12 +193,31 @@ where
         data: &[u8],
         session: &mut Session,
     ) -> Result<(), Self::Error> {
-        if let Some(buf) = EXECUTOR_BUFFERS
-            .write()
-            .expect("Executor buffers RWLock poisoned!")
-            .get_mut(&channel)
-        {
-            buf.extend(data);
+        if ext == 1 {
+            // ext 1 is stderr according to SSH spec
+            if let Some(buf) = STDERR_BUFFERS
+                .write()
+                .expect("Stderr rwlock was poisoned!")
+                .get_mut(&channel)
+            {
+                buf.extend(data);
+            }
+        } else {
+            let mut write_ref = STDEXT_BUFFERS.write().expect("Stdext rwlock was poisoned!");
+            match write_ref
+                .iter_mut()
+                .filter(|entry| entry.channel_id == channel && entry.ext == ext)
+                .next()
+            {
+                Some(existing_entry) => {
+                    existing_entry.buffer.extend(data);
+                }
+                None => write_ref.push(StdextEntry {
+                    channel_id: channel,
+                    ext,
+                    buffer: data.into(),
+                }),
+            };
         }
 
         self.inner.extended_data(channel, ext, data, session).await

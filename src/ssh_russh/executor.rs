@@ -5,6 +5,7 @@ use std::{
 };
 
 use async_trait::async_trait;
+use bytes::BytesMut;
 use once_cell::sync::Lazy;
 use russh::{
     client::{self, Msg},
@@ -19,8 +20,17 @@ use crate::executor::{LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, Li
 
 use super::RusshLinux;
 
-pub(super) static EXECUTOR_BUFFERS: Lazy<Arc<RwLock<HashMap<ChannelId, BytesMut>>>> =
+pub(super) static STDOUT_BUFFERS: Lazy<Arc<RwLock<HashMap<ChannelId, BytesMut>>>> =
     Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+pub(super) static STDERR_BUFFERS: Lazy<Arc<RwLock<HashMap<ChannelId, BytesMut>>>> =
+    Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+pub(super) static STDEXT_BUFFERS: Lazy<Arc<RwLock<Vec<StdextEntry>>>> = Lazy::new(|| Arc::new(RwLock::new(Vec::new())));
+
+pub(super) struct StdextEntry {
+    pub channel_id: ChannelId,
+    pub ext: u32,
+    pub buffer: BytesMut,
+}
 
 pub struct RusshLinuxProcess<'a> {
     pub(super) channel_id: ChannelId,
@@ -53,37 +63,13 @@ impl<'a> LinuxProcess for RusshLinuxProcess<'a> {
 
     async fn await_exit(&mut self) -> Result<Option<i64>, LinuxProcessError> {
         let mut channel = self.channel_mutex.lock().await;
-        let mut status_code: Option<i64> = None;
-
-        loop {
-            match channel.wait().await {
-                None => break,
-                Some(ChannelMsg::ExitStatus { exit_status }) => {
-                    status_code = Some(exit_status.into());
-                }
-                Some(_) => {}
-            }
-        }
-
-        Ok(status_code)
+        Ok(await_process_exit(&mut channel).await)
     }
 
     async fn await_exit_with_output(mut self) -> Result<LinuxProcessOutput, LinuxProcessError> {
-        let status_code = self.await_exit().await?;
-        let stdout: Vec<u8> = match EXECUTOR_BUFFERS
-            .read()
-            .expect("Executor buffers RWLock was poisoned!")
-            .get(&self.channel_id)
-        {
-            Some(buf) => buf.as_ref().into(),
-            None => Vec::new(),
-        };
-
-        Ok(LinuxProcessOutput {
-            stdout,
-            stderr: Vec::new(),
-            status_code,
-        })
+        let mut channel = self.channel_mutex.lock().await;
+        let status_code = await_process_exit(&mut channel).await;
+        Ok(fetch_process_output(&self.channel_id, status_code))
     }
 
     async fn begin_kill(&mut self) -> Result<(), LinuxProcessError> {
@@ -113,9 +99,13 @@ where
         apply_process_configuration(&mut channel, process_configuration)
             .await
             .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
-        EXECUTOR_BUFFERS
+        STDOUT_BUFFERS
             .write()
-            .expect("Executor buffers RWLock was poisoned!")
+            .expect("Stdout rwlock was poisoned!")
+            .insert(channel.id(), BytesMut::new());
+        STDERR_BUFFERS
+            .write()
+            .expect("Stderr rwlock was poisoned!")
             .insert(channel.id(), BytesMut::new());
 
         if process_configuration.redirect_stdin {
@@ -133,12 +123,16 @@ where
                 .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
         }
 
-        let stdin = Box::pin(channel.make_writer());
+        let stdin = Box::pin(channel.make_writer()) as Pin<Box<dyn AsyncWrite + Send>>;
+        let stdin_option = match process_configuration.redirect_stdin {
+            true => Some(stdin),
+            false => None,
+        };
 
         Ok(RusshLinuxProcess {
             channel_id: channel.id(),
             channel_mutex: Arc::new(Mutex::new(channel)),
-            stdin: Some(stdin),
+            stdin: stdin_option,
         })
     }
 
@@ -148,30 +142,59 @@ where
     ) -> Result<LinuxProcessOutput, LinuxProcessError> {
         let process = self.begin_execute(process_configuration).await?;
         let mut channel = process.channel_mutex.lock().await;
+        let status_code = await_process_exit(&mut channel).await;
+        Ok(fetch_process_output(&channel.id(), status_code))
+    }
+}
 
-        let mut status_code: Option<i64> = None;
-        loop {
-            match channel.wait().await {
-                None => break,
-                Some(ChannelMsg::ExitStatus { exit_status }) => status_code = Some(exit_status.into()),
-                Some(_) => {}
+async fn await_process_exit(channel: &mut Channel<Msg>) -> Option<i64> {
+    let mut status_code = None;
+
+    loop {
+        match channel.wait().await {
+            None => break,
+            Some(ChannelMsg::ExitStatus { exit_status }) => {
+                status_code = Some(exit_status.into());
             }
+            Some(_) => {}
         }
+    }
 
-        let stdout: Vec<u8> = match EXECUTOR_BUFFERS
-            .read()
-            .expect("Executor buffers RWLock was poisoned!")
-            .get(&process.channel_id)
-        {
-            Some(buf) => buf.as_ref().into(),
-            None => Vec::new(),
-        };
+    status_code
+}
 
-        Ok(LinuxProcessOutput {
-            stdout,
-            stderr: Vec::new(),
-            status_code,
-        })
+fn fetch_process_output(channel_id: &ChannelId, status_code: Option<i64>) -> LinuxProcessOutput {
+    let stdout: Vec<u8> = match STDOUT_BUFFERS
+        .read()
+        .expect("Stdout rwlock was poisoned!")
+        .get(&channel_id)
+    {
+        Some(buf) => buf.as_ref().into(),
+        None => Vec::new(),
+    };
+
+    let stderr: Vec<u8> = match STDERR_BUFFERS
+        .read()
+        .expect("Stderr rwlock was poisoned!")
+        .get(&channel_id)
+    {
+        Some(buf) => buf.as_ref().into(),
+        None => Vec::new(),
+    };
+
+    let stdout_extended = STDEXT_BUFFERS
+        .read()
+        .expect("Stdext rwlock was poisoned!")
+        .iter()
+        .filter(|entry| entry.channel_id == *channel_id)
+        .map(|entry| (entry.ext, entry.buffer.as_ref().to_vec()))
+        .collect();
+
+    LinuxProcessOutput {
+        stdout,
+        stderr,
+        stdout_extended,
+        status_code,
     }
 }
 
@@ -197,7 +220,6 @@ async fn apply_process_configuration(
         command = format!("(cd {} && {})", path.to_str().unwrap(), command);
     }
 
-    // 4. issue command
     channel.exec(true, command).await?;
 
     Ok(())

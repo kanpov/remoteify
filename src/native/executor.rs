@@ -1,4 +1,7 @@
-use std::process::{Output, Stdio};
+use std::{
+    collections::HashMap,
+    process::{Output, Stdio},
+};
 
 use async_trait::async_trait;
 use tokio::{
@@ -82,6 +85,7 @@ impl From<Output> for LinuxProcessOutput {
         LinuxProcessOutput {
             stdout: value.stdout,
             stderr: value.stderr,
+            stdout_extended: HashMap::new(), // extended doesn't exist on native
             status_code: value.status.code().map(|i| i.into()),
         }
     }

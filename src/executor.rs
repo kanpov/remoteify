@@ -109,6 +109,7 @@ pub enum LinuxProcessError {
 pub struct LinuxProcessOutput {
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
+    pub stdout_extended: HashMap<u32, Vec<u8>>,
     pub status_code: Option<i64>,
 }
 
