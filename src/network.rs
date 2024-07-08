@@ -1,10 +1,8 @@
-use std::error::Error;
-
 use async_trait::async_trait;
 
 pub enum LinuxNetworkError {
     UnsupportedOperation,
-    Other(Box<dyn Error + Send>),
+    Other(Box<dyn std::error::Error>),
 }
 
 #[async_trait]

@@ -1,16 +1,19 @@
 use std::{
     collections::HashMap,
+    pin::Pin,
     sync::{Arc, RwLock},
 };
 
 use async_trait::async_trait;
-use bytes::BytesMut;
 use once_cell::sync::Lazy;
 use russh::{
     client::{self, Msg},
     Channel, ChannelId, ChannelMsg, Sig,
 };
-use tokio::sync::Mutex;
+use tokio::{
+    io::{AsyncWrite, AsyncWriteExt},
+    sync::Mutex,
+};
 
 use crate::executor::{LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError, LinuxProcessOutput};
 
@@ -19,15 +22,33 @@ use super::RusshLinux;
 pub(super) static EXECUTOR_BUFFERS: Lazy<Arc<RwLock<HashMap<ChannelId, BytesMut>>>> =
     Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
 
-pub struct RusshLinuxProcess {
+pub struct RusshLinuxProcess<'a> {
     pub(super) channel_id: ChannelId,
     pub(super) channel_mutex: Arc<Mutex<Channel<Msg>>>,
+    pub(super) stdin: Option<Pin<Box<dyn AsyncWrite + Send + 'a>>>,
 }
 
 #[async_trait]
-impl LinuxProcess for RusshLinuxProcess {
+impl<'a> LinuxProcess for RusshLinuxProcess<'a> {
     fn id(&self) -> Option<u32> {
         None
+    }
+
+    async fn write_to_stdin(&mut self, data: &[u8]) -> Result<usize, LinuxProcessError> {
+        let stdin_ref = self.stdin.as_mut().ok_or(LinuxProcessError::StdinNotPiped)?;
+        stdin_ref
+            .write(data)
+            .await
+            .map_err(|err| LinuxProcessError::Other(Box::new(err)))
+    }
+
+    async fn close_stdin(&mut self) -> Result<(), LinuxProcessError> {
+        let channel = self.channel_mutex.lock().await;
+        channel
+            .eof()
+            .await
+            .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
+        Ok(())
     }
 
     async fn await_exit(&mut self) -> Result<Option<i64>, LinuxProcessError> {
@@ -45,25 +66,6 @@ impl LinuxProcess for RusshLinuxProcess {
         }
 
         Ok(status_code)
-    }
-
-    async fn write_to_stdin(&mut self, data: &[u8]) -> Result<(), LinuxProcessError> {
-        let channel = self.channel_mutex.lock().await;
-        channel
-            .data(data)
-            .await
-            .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
-
-        Ok(())
-    }
-
-    async fn write_eof(&mut self) -> Result<(), LinuxProcessError> {
-        let channel = self.channel_mutex.lock().await;
-        channel
-            .eof()
-            .await
-            .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
-        Ok(())
     }
 
     async fn await_exit_with_output(mut self) -> Result<LinuxProcessOutput, LinuxProcessError> {
@@ -84,7 +86,7 @@ impl LinuxProcess for RusshLinuxProcess {
         })
     }
 
-    async fn send_kill_request(&mut self) -> Result<(), LinuxProcessError> {
+    async fn begin_kill(&mut self) -> Result<(), LinuxProcessError> {
         let channel = self.channel_mutex.lock().await;
         channel
             .signal(Sig::KILL)
@@ -131,9 +133,12 @@ where
                 .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
         }
 
+        let stdin = Box::pin(channel.make_writer());
+
         Ok(RusshLinuxProcess {
             channel_id: channel.id(),
             channel_mutex: Arc::new(Mutex::new(channel)),
+            stdin: Some(stdin),
         })
     }
 

@@ -1,13 +1,9 @@
 use std::process::{Output, Stdio};
 
 use async_trait::async_trait;
-use nix::{
-    sys::signal::{self, Signal},
-    unistd::Pid,
-};
 use tokio::{
     io::AsyncWriteExt,
-    process::{Child, Command},
+    process::{Child, ChildStdin, Command},
 };
 
 use crate::executor::{LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError, LinuxProcessOutput};
@@ -16,25 +12,28 @@ use super::NativeLinux;
 
 pub struct NativeLinuxProcess {
     child: Child,
+    stdin: Option<ChildStdin>,
 }
 
 #[async_trait]
-impl LinuxProcess for NativeLinuxProcess {
+impl<'a> LinuxProcess for NativeLinuxProcess {
     fn id(&self) -> Option<u32> {
         self.child.id()
     }
 
-    async fn write_to_stdin(&mut self, data: &[u8]) -> Result<(), LinuxProcessError> {
-        let stdin = match &mut self.child.stdin {
-            Some(stdin) => stdin,
-            None => return Err(LinuxProcessError::StdinNotPiped),
-        };
-        stdin.write(data).await.map(|_| ()).map_err(LinuxProcessError::IO)
+    async fn write_to_stdin(&mut self, data: &[u8]) -> Result<usize, LinuxProcessError> {
+        let stdin_ref = self.stdin.as_mut().ok_or(LinuxProcessError::StdinNotPiped)?;
+        stdin_ref.write(data).await.map_err(|err| LinuxProcessError::IO(err))
     }
 
-    async fn write_eof(&mut self) -> Result<(), LinuxProcessError> {
-        let pid = self.child.id().ok_or(LinuxProcessError::ProcessIdNotFound)? as i32;
-        signal::kill(Pid::from_raw(pid), Signal::SIGQUIT).map_err(|err| LinuxProcessError::Other(Box::new(err)))
+    async fn close_stdin(&mut self) -> Result<(), LinuxProcessError> {
+        match &self.stdin {
+            Some(_) => {
+                drop(self.stdin.take());
+                Ok(())
+            }
+            None => Err(LinuxProcessError::StdinNotPiped),
+        }
     }
 
     async fn await_exit_with_output(self) -> Result<LinuxProcessOutput, LinuxProcessError> {
@@ -42,7 +41,7 @@ impl LinuxProcess for NativeLinuxProcess {
         Ok(os_output.into())
     }
 
-    async fn send_kill_request(&mut self) -> Result<(), LinuxProcessError> {
+    async fn begin_kill(&mut self) -> Result<(), LinuxProcessError> {
         self.child.start_kill().map_err(LinuxProcessError::IO)
     }
 
@@ -62,8 +61,10 @@ impl LinuxExecutor for NativeLinux {
         process_configuration: &LinuxProcessConfiguration,
     ) -> Result<NativeLinuxProcess, LinuxProcessError> {
         let mut command = create_command_from_config(process_configuration);
-        let child = command.spawn().map_err(LinuxProcessError::IO)?;
-        Ok(NativeLinuxProcess { child })
+        let mut child = command.spawn().map_err(LinuxProcessError::IO)?;
+        let stdin = child.stdin.take();
+
+        Ok(NativeLinuxProcess { child, stdin })
     }
 
     async fn execute(

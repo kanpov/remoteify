@@ -95,11 +95,13 @@ impl LinuxProcessConfiguration {
 
 #[derive(Debug)]
 pub enum LinuxProcessError {
-    NotSupportedByImplementation,
+    UnsupportedOperation,
     ProcessIdNotFound,
     StdinNotPiped,
+    StdoutNotPiped,
+    StderrNotPiped,
+    StreamPipedButNotFound,
     IO(std::io::Error),
-    CouldNotAcquireStream,
     Other(Box<dyn std::error::Error>),
 }
 
@@ -111,18 +113,28 @@ pub struct LinuxProcessOutput {
 }
 
 #[async_trait]
-pub trait LinuxProcess {
+pub trait LinuxProcess: Sized {
     fn id(&self) -> Option<u32>;
 
-    async fn write_to_stdin(&mut self, data: &[u8]) -> Result<(), LinuxProcessError>;
+    async fn write_to_stdin(&mut self, data: &[u8]) -> Result<usize, LinuxProcessError>;
 
-    async fn write_eof(&mut self) -> Result<(), LinuxProcessError>;
+    async fn close_stdin(&mut self) -> Result<(), LinuxProcessError>;
 
     async fn await_exit(&mut self) -> Result<Option<i64>, LinuxProcessError>;
 
     async fn await_exit_with_output(mut self) -> Result<LinuxProcessOutput, LinuxProcessError>;
 
-    async fn send_kill_request(&mut self) -> Result<(), LinuxProcessError>;
+    async fn begin_kill(&mut self) -> Result<(), LinuxProcessError>;
+
+    async fn kill(&mut self) -> Result<Option<i64>, LinuxProcessError> {
+        self.begin_kill().await?;
+        self.await_exit().await
+    }
+
+    async fn kill_with_output(mut self) -> Result<LinuxProcessOutput, LinuxProcessError> {
+        self.begin_kill().await?;
+        self.await_exit_with_output().await
+    }
 }
 
 #[async_trait]
