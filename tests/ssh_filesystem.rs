@@ -1,12 +1,9 @@
-use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::Path, pin::Pin};
+use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::Path};
 
 use common::{conv_path, conv_path_non_buf, entries_contain, gen_nested_tmp_path, gen_tmp_path, TestData};
-use remoteify::{
-    executor::{LinuxExecutor, LinuxProcess, LinuxProcessConfiguration},
-    filesystem::{LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions},
-};
+use remoteify::filesystem::{LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions};
 use russh_sftp::protocol::FileAttributes;
-use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 mod common;
 
@@ -346,19 +343,4 @@ fn assert_metadata(expected_metadata: FileAttributes, actual_metadata: LinuxFile
     assert_eq!(actual_metadata.user_name(), None);
     assert_eq!(actual_metadata.group_id().unwrap(), expected_metadata.gid.unwrap());
     assert_eq!(actual_metadata.group_name(), None);
-}
-
-#[tokio::test]
-async fn t() {
-    let test_data = TestData::setup().await;
-    let mut conf = LinuxProcessConfiguration::new("/bin/bash");
-    conf.redirect_stdout();
-    conf.redirect_stdin();
-    let mut proc = test_data.implementation.begin_execute(&conf).await.unwrap();
-    proc.write_to_stdin(b"qbc").await.unwrap();
-    proc.write_to_stdin(b" ; exit").await.unwrap();
-    proc.close_stdin().await.unwrap();
-    let output = proc.await_exit_with_output().await.unwrap();
-    let stderr = String::from_utf8(output.stderr.unwrap()).unwrap();
-    println!("{stderr}");
 }

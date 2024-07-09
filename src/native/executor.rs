@@ -25,8 +25,8 @@ static STDERR_BUFFERS: Lazy<Arc<RwLock<HashMap<u32, BytesMut>>>> = Lazy::new(|| 
 pub struct NativeLinuxProcess {
     child: Child,
     stdin: Option<ChildStdin>,
-    stdout_piped: bool,
-    stderr_piped: bool,
+    redirect_stdout: bool,
+    redirect_stderr: bool,
     pid: Option<u32>,
 }
 
@@ -56,13 +56,13 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
         let mut stdout: Option<Vec<u8>> = None;
         let mut stderr: Option<Vec<u8>> = None;
 
-        if self.stdout_piped {
+        if self.redirect_stdout {
             if let Some(buf) = STDOUT_BUFFERS.read().expect("Stdout rwlock was poisoned!").get(&pid) {
                 stdout = Some(buf.to_vec());
             }
         }
 
-        if self.stderr_piped {
+        if self.redirect_stderr {
             if let Some(buf) = STDERR_BUFFERS.read().expect("Stderr rwlock was poisoned!").get(&pid) {
                 stderr = Some(buf.to_vec());
             }
@@ -77,7 +77,11 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
 
     async fn await_exit_with_output(self) -> Result<LinuxProcessOutput, LinuxProcessError> {
         let os_output = self.child.wait_with_output().await.map_err(LinuxProcessError::IO)?;
-        Ok(os_output.into())
+        Ok(get_process_output(
+            os_output,
+            self.redirect_stdout,
+            self.redirect_stderr,
+        ))
     }
 
     async fn begin_kill(&mut self) -> Result<(), LinuxProcessError> {
@@ -127,8 +131,8 @@ impl LinuxExecutor for NativeLinux {
         Ok(NativeLinuxProcess {
             child,
             stdin,
-            stdout_piped: process_configuration.redirect_stdout,
-            stderr_piped: process_configuration.redirect_stderr,
+            redirect_stdout: process_configuration.redirect_stdout,
+            redirect_stderr: process_configuration.redirect_stderr,
             pid,
         })
     }
@@ -139,18 +143,30 @@ impl LinuxExecutor for NativeLinux {
     ) -> Result<LinuxProcessOutput, LinuxProcessError> {
         let mut command = create_command_from_config(process_configuration);
         let os_output = command.output().await.map_err(LinuxProcessError::IO)?;
-        Ok(os_output.into())
+        Ok(get_process_output(
+            os_output,
+            process_configuration.redirect_stdout,
+            process_configuration.redirect_stderr,
+        ))
     }
 }
 
-impl From<Output> for LinuxProcessOutput {
-    fn from(value: Output) -> Self {
-        LinuxProcessOutput {
-            stdout: Some(value.stdout),
-            stderr: Some(value.stderr),
-            stdout_extended: HashMap::new(), // extended doesn't exist on native
-            status_code: value.status.code().map(|i| i.into()),
-        }
+fn get_process_output(os_output: Output, redirect_stdout: bool, redirect_stderr: bool) -> LinuxProcessOutput {
+    let stdout = match redirect_stdout {
+        true => Some(os_output.stdout),
+        false => None,
+    };
+
+    let stderr = match redirect_stderr {
+        true => Some(os_output.stderr),
+        false => None,
+    };
+
+    LinuxProcessOutput {
+        stdout,
+        stderr,
+        stdout_extended: HashMap::new(),
+        status_code: os_output.status.code().map(|i| i.into()),
     }
 }
 

@@ -102,7 +102,6 @@ impl LinuxProcessConfiguration {
 
 #[derive(Debug)]
 pub enum LinuxProcessError {
-    UnsupportedOperation,
     ProcessIdNotFound,
     StdinNotPiped,
     StdoutNotPiped,
