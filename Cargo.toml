@@ -19,6 +19,8 @@ once_cell = { version = "1.19.0", optional = true }
 # openssh impl
 openssh = { version = "0.10.4", optional = true }
 openssh-sftp-client = { version = "0.14.4", optional = true }
+unix_permissions_ext = { version = "0.1.2", optional = true }
+futures-util = { version = "0.3.30", optional = true }
 
 [dev-dependencies]
 uuid = { version = "1.9.1", features = ["v4"] }
@@ -30,4 +32,9 @@ remoteify = { path = ".", features = ["native", "ssh_russh", "ssh_openssh"] }
 default = []
 native = ["dep:nix"]
 ssh_russh = ["dep:russh", "dep:russh-keys", "dep:russh-sftp", "dep:once_cell"]
-ssh_openssh = ["dep:openssh", "dep:openssh-sftp-client"]
+ssh_openssh = [
+    "dep:openssh",
+    "dep:openssh-sftp-client",
+    "dep:unix_permissions_ext",
+    "dep:futures-util",
+]

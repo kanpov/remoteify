@@ -1976,6 +1976,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bytes",
+ "futures-util",
  "nix",
  "once_cell",
  "openssh",
@@ -1986,6 +1987,7 @@ dependencies = [
  "russh-sftp",
  "testcontainers",
  "tokio",
+ "unix_permissions_ext",
  "uuid",
 ]
 
@@ -2927,6 +2929,12 @@ dependencies = [
  "crypto-common",
  "subtle",
 ]
+
+[[package]]
+name = "unix_permissions_ext"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7497808a85e03f612f13e9c5061e4c81cdee86e6c00adfa1096690990ccd08e9"
 
 [[package]]
 name = "untrusted"

@@ -3,7 +3,7 @@ mod filesystem;
 use std::sync::Arc;
 
 use openssh::{Session, Stdio};
-use openssh_sftp_client::Sftp;
+use openssh_sftp_client::{Sftp, SftpOptions};
 use tokio::sync::Mutex;
 
 pub struct OpensshLinux {
@@ -20,7 +20,7 @@ pub enum OpensshConnectionError {
 }
 
 impl OpensshLinux {
-    async fn new(session: Session) -> Result<OpensshLinux, OpensshConnectionError> {
+    async fn new(session: Session, sftp_options: SftpOptions) -> Result<OpensshLinux, OpensshConnectionError> {
         session.check().await.map_err(OpensshConnectionError::CheckError)?;
         let mut child = session
             .subsystem("sftp")
@@ -36,7 +36,7 @@ impl OpensshLinux {
                 .stdout()
                 .take()
                 .ok_or(OpensshConnectionError::SftpStdoutNotFound)?,
-            Default::default(),
+            sftp_options,
         )
         .await
         .map_err(OpensshConnectionError::SftpEstablishError)?;
