@@ -193,7 +193,12 @@ impl LinuxFilesystem for OpensshLinux {
     }
 
     async fn get_symlink_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata> {
-        todo!()
+        let sftp = self.sftp_mutex.lock().await;
+        sftp.fs()
+            .symlink_metadata(path)
+            .await
+            .map_err(io::Error::other)
+            .map(|metadata| metadata.into())
     }
 }
 

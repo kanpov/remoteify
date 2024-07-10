@@ -26,6 +26,8 @@ futures-util = { version = "0.3.30", optional = true }
 uuid = { version = "1.9.1", features = ["v4"] }
 tokio = { version = "1.38.0", features = ["macros"] }
 testcontainers = "0.20.0"
+openssh-sftp-client = { version = "0.14.4", features = ["openssh"] }
+
 remoteify = { path = ".", features = ["native", "ssh_russh", "ssh_openssh"] }
 
 [features]

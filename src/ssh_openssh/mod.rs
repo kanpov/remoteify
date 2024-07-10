@@ -11,6 +11,7 @@ pub struct OpensshLinux {
     sftp_mutex: Arc<Mutex<Sftp>>,
 }
 
+#[derive(Debug)]
 pub enum OpensshConnectionError {
     CheckError(openssh::Error),
     SftpRequestError(openssh::Error),
@@ -20,7 +21,7 @@ pub enum OpensshConnectionError {
 }
 
 impl OpensshLinux {
-    async fn new(session: Session, sftp_options: SftpOptions) -> Result<OpensshLinux, OpensshConnectionError> {
+    pub async fn new(session: Session, sftp_options: SftpOptions) -> Result<OpensshLinux, OpensshConnectionError> {
         session.check().await.map_err(OpensshConnectionError::CheckError)?;
         let mut child = session
             .subsystem("sftp")

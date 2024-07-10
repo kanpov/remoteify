@@ -4,8 +4,11 @@ use std::{
 };
 
 use async_trait::async_trait;
+use openssh::{Session, SessionBuilder};
+use openssh_sftp_client::{Sftp, SftpOptions};
 use remoteify::{
     filesystem::{LinuxDirEntry, LinuxFileType},
+    ssh_openssh::OpensshLinux,
     ssh_russh::{
         connection::{RusshAuthentication, RusshConnectionOptions},
         RusshLinux, RusshPtyOptions,
@@ -38,36 +41,29 @@ pub fn gen_nested_tmp_path() -> PathBuf {
 static CONTAINER_PORT_CELL: OnceCell<u16> = OnceCell::const_new();
 
 #[allow(unused)]
-pub struct TestData {
+pub struct RusshData {
     pub ssh: Channel<Msg>,
     pub sftp: SftpSession,
     pub implementation: RusshLinux<AcceptingHandler>,
 }
 
-impl TestData {
+#[allow(unused)]
+pub struct OpensshData {
+    pub ssh: Session,
+    pub sftp: Sftp,
+    pub implementation: OpensshLinux,
+}
+
+impl RusshData {
     #[allow(unused)]
-    pub async fn setup() -> TestData {
-        let ssh_port = CONTAINER_PORT_CELL
-            .get_or_init(|| async {
-                std::env::set_var("TESTCONTAINERS_COMMAND", "keep");
-                let container = GenericImage::new("ssh_server", "latest")
-                    .with_exposed_port(ContainerPort::Tcp(22))
-                    .start()
-                    .await
-                    .expect("Could not start SSH container");
-                let ports = container.ports().await.expect("Could not get SSH container ports");
-                let port = ports
-                    .map_to_host_port_ipv4(ContainerPort::Tcp(22))
-                    .expect("Could not get SSH container port corresponding to 22");
-                port
-            })
-            .await;
+    pub async fn setup() -> RusshData {
+        let ssh_port = get_ssh_port().await;
 
         let mut handle_option: Option<Handle<AcceptingHandler>> = None;
         loop {
             match client::connect(
                 Arc::new(Config::default()),
-                ("localhost", *ssh_port),
+                ("localhost", ssh_port),
                 AcceptingHandler {},
             )
             .await
@@ -104,7 +100,7 @@ impl TestData {
                 AcceptingHandler {},
                 RusshConnectionOptions {
                     host: "localhost".into(),
-                    port: *ssh_port,
+                    port: ssh_port,
                     username: "root".into(),
                     config: Config::default(),
                     authentication: RusshAuthentication::Password {
@@ -127,7 +123,7 @@ impl TestData {
             }
         }
 
-        TestData {
+        RusshData {
             ssh: ssh_chan,
             sftp: sftp_session,
             implementation: impl_option.unwrap(),
@@ -147,6 +143,57 @@ impl TestData {
         let actual_content = String::from_utf8(self.sftp.read(conv_path(&path)).await.unwrap()).unwrap();
         assert_eq!(actual_content, expected_content);
     }
+}
+
+impl OpensshData {
+    #[allow(unused)]
+    pub async fn setup() -> OpensshData {
+        let ssh_port = get_ssh_port().await;
+        let owned_sftp_session = mk_openssh_session(&ssh_port).await;
+        let owned_ssh_session = mk_openssh_session(&ssh_port).await;
+        let given_session = mk_openssh_session(&ssh_port).await;
+        let owned_sftp = Sftp::from_session(owned_sftp_session, SftpOptions::default())
+            .await
+            .expect("Could not make sftp");
+
+        let implementation = OpensshLinux::new(given_session, SftpOptions::default())
+            .await
+            .expect("Could not establish impl");
+
+        OpensshData {
+            ssh: owned_ssh_session,
+            sftp: owned_sftp,
+            implementation,
+        }
+    }
+}
+
+async fn mk_openssh_session(ssh_port: &u16) -> Session {
+    let builder = SessionBuilder::default();
+    let str_dest = format!("ssh://root@localhost:{}", ssh_port);
+    let (builder, dest) = builder.resolve(str_dest.as_str());
+    let tempdir = builder.launch_master(dest).await.expect("Could not launch ssh master");
+
+    Session::new_process_mux(tempdir)
+}
+
+async fn get_ssh_port() -> u16 {
+    let ssh_port = CONTAINER_PORT_CELL
+        .get_or_init(|| async {
+            std::env::set_var("TESTCONTAINERS_COMMAND", "keep");
+            let container = GenericImage::new("ssh_server", "latest")
+                .with_exposed_port(ContainerPort::Tcp(22))
+                .start()
+                .await
+                .expect("Could not start SSH container");
+            let ports = container.ports().await.expect("Could not get SSH container ports");
+            let port = ports
+                .map_to_host_port_ipv4(ContainerPort::Tcp(22))
+                .expect("Could not get SSH container port corresponding to 22");
+            port
+        })
+        .await;
+    *ssh_port
 }
 
 #[allow(unused)]

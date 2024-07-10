@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use common::{conv_path, conv_path_non_buf, entries_contain, gen_nested_tmp_path, gen_tmp_path, TestData};
+use common::{conv_path, conv_path_non_buf, entries_contain, gen_nested_tmp_path, gen_tmp_path, RusshData};
 use remoteify::filesystem::{LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions, LinuxPermissions};
 use russh_sftp::protocol::FileAttributes;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -9,14 +9,14 @@ mod common;
 
 #[tokio::test]
 async fn exists_is_false_for_missing_item() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let path = gen_tmp_path();
     assert!(!test_data.implementation.exists(&path).await.expect("Call failed"));
 }
 
 #[tokio::test]
 async fn exists_is_true_for_existent_file() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let path = gen_tmp_path();
     test_data.sftp.create(conv_path(&path)).await.unwrap();
     assert!(test_data.implementation.exists(&path).await.expect("Call failed"));
@@ -24,7 +24,7 @@ async fn exists_is_true_for_existent_file() {
 
 #[tokio::test]
 async fn exists_is_true_for_existent_dir() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let path = gen_tmp_path();
     test_data.sftp.create_dir(conv_path(&path)).await.unwrap();
     assert!(test_data.implementation.exists(&path).await.expect("Call failed"));
@@ -32,7 +32,7 @@ async fn exists_is_true_for_existent_dir() {
 
 #[tokio::test]
 async fn open_file_with_read_should_work() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let path = test_data.init_file("content").await;
     let mut handle = test_data
         .implementation
@@ -46,7 +46,7 @@ async fn open_file_with_read_should_work() {
 
 #[tokio::test]
 async fn open_file_with_write_should_work() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let path = test_data.init_file("content").await;
     let mut handle = test_data
         .implementation
@@ -59,7 +59,7 @@ async fn open_file_with_write_should_work() {
 
 #[tokio::test]
 async fn open_file_with_append_should_work() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let path = test_data.init_file("first").await;
     let mut handle = test_data
         .implementation
@@ -72,7 +72,7 @@ async fn open_file_with_append_should_work() {
 
 #[tokio::test]
 async fn open_file_with_truncate_should_work() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let path = test_data.init_file("current").await;
     let mut handle = test_data
         .implementation
@@ -85,7 +85,7 @@ async fn open_file_with_truncate_should_work() {
 
 #[tokio::test]
 async fn open_file_with_create_should_work() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let path = gen_tmp_path();
     let mut handle = test_data
         .implementation
@@ -98,7 +98,7 @@ async fn open_file_with_create_should_work() {
 
 #[tokio::test]
 async fn create_file_should_persist() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let path = gen_tmp_path();
     test_data.implementation.create_file(&path).await.expect("Call failed");
     assert!(test_data.sftp.try_exists(conv_path(&path)).await.unwrap());
@@ -106,7 +106,7 @@ async fn create_file_should_persist() {
 
 #[tokio::test]
 async fn rename_file_should_perform_change() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let old_path = test_data.init_file("some content").await;
     let new_path = gen_tmp_path();
     test_data
@@ -121,7 +121,7 @@ async fn rename_file_should_perform_change() {
 
 #[tokio::test]
 async fn copy_file_should_perform_change() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let old_path = test_data.init_file("content").await;
     let new_path = gen_tmp_path();
     test_data
@@ -135,7 +135,7 @@ async fn copy_file_should_perform_change() {
 
 #[tokio::test]
 async fn canonicalize_should_perform_transformation() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     assert_eq!(
         test_data
             .implementation
@@ -150,7 +150,7 @@ async fn canonicalize_should_perform_transformation() {
 
 #[tokio::test]
 async fn symlink_should_perform_linking() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let src_path = test_data.init_file("content").await;
     let dst_path = gen_tmp_path();
     test_data
@@ -166,7 +166,7 @@ async fn symlink_should_perform_linking() {
 
 #[tokio::test]
 async fn hardlink_should_perform_linking() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let src_path = test_data.init_file("content").await;
     let dst_path = gen_tmp_path();
     test_data
@@ -180,7 +180,7 @@ async fn hardlink_should_perform_linking() {
 
 #[tokio::test]
 async fn read_link_should_return_correct_source_path() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let src_path = test_data.init_file("content").await;
     let dst_path = gen_tmp_path();
     test_data
@@ -200,7 +200,7 @@ async fn read_link_should_return_correct_source_path() {
 
 #[tokio::test]
 async fn set_permissions_should_perform_change() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let path = test_data.init_file("content").await;
     test_data
         .implementation
@@ -221,7 +221,7 @@ async fn set_permissions_should_perform_change() {
 
 #[tokio::test]
 async fn remove_file_should_persist_changes() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let path = test_data.init_file("content").await;
     test_data.implementation.remove_file(&path).await.expect("Call failed");
     assert!(!test_data.sftp.try_exists(conv_path(&path)).await.unwrap());
@@ -229,7 +229,7 @@ async fn remove_file_should_persist_changes() {
 
 #[tokio::test]
 async fn create_dir_should_persist() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let path = gen_tmp_path();
     test_data.implementation.create_dir(&path).await.expect("Call failed");
     assert!(test_data.sftp.try_exists(conv_path(&path)).await.unwrap());
@@ -237,7 +237,7 @@ async fn create_dir_should_persist() {
 
 #[tokio::test]
 async fn create_dir_recursively_should_persist() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let path = gen_nested_tmp_path();
     test_data
         .implementation
@@ -249,7 +249,7 @@ async fn create_dir_recursively_should_persist() {
 
 #[tokio::test]
 async fn list_dir_returns_correct_results() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let file_path = test_data.init_file("content").await;
     let dir_path = gen_tmp_path();
     test_data.sftp.create_dir(conv_path(&dir_path)).await.unwrap();
@@ -273,7 +273,7 @@ async fn list_dir_returns_correct_results() {
 
 #[tokio::test]
 async fn remove_dir_should_persist() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let path = gen_tmp_path();
     test_data.sftp.create_dir(conv_path(&path)).await.unwrap();
     test_data.implementation.remove_dir(&path).await.expect("Call failed");
@@ -282,7 +282,7 @@ async fn remove_dir_should_persist() {
 
 #[tokio::test]
 async fn remove_dir_recursively_should_persist() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let path = gen_nested_tmp_path();
     let parent_path = path.parent().unwrap();
     test_data.sftp.create_dir(conv_path_non_buf(parent_path)).await.unwrap();
@@ -297,7 +297,7 @@ async fn remove_dir_recursively_should_persist() {
 
 #[tokio::test]
 async fn get_metadata_should_return_correct_result() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let path = test_data.init_file("content").await;
     let expected_metadata = test_data.sftp.metadata(conv_path(&path)).await.unwrap();
     let actual_metadata = test_data.implementation.get_metadata(&path).await.expect("Call failed");
@@ -306,7 +306,7 @@ async fn get_metadata_should_return_correct_result() {
 
 #[tokio::test]
 async fn get_symlink_metadata_should_return_correct_result() {
-    let test_data = TestData::setup().await;
+    let test_data = RusshData::setup().await;
     let src_path = test_data.init_file("content").await;
     let symlink_path = gen_tmp_path();
     test_data
