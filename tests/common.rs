@@ -1,6 +1,7 @@
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
+    time::Duration,
 };
 
 use async_trait::async_trait;
@@ -149,44 +150,26 @@ impl OpensshData {
     #[allow(unused)]
     pub async fn setup() -> OpensshData {
         let ssh_port = get_ssh_port().await;
-        let owned_session;
+        let os1;
 
         loop {
             match mk_openssh_session(&ssh_port).await {
                 Ok(session) => {
-                    owned_session = session;
+                    os1 = session;
                     break;
                 }
                 Err(_) => {}
             }
         }
 
-        let given_session = mk_openssh_session(&ssh_port)
-            .await
-            .expect("Could not establish given session");
-
-        let mut child = owned_session
-            .subsystem("sftp")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
-            .await
-            .expect("Could not make sftp child");
-        let owned_sftp = Sftp::new(
-            child.stdin().take().unwrap(),
-            child.stdout().take().unwrap(),
-            SftpOptions::default(),
-        )
-        .await
-        .expect("Could not make sftp");
-
-        let implementation = OpensshLinux::new(given_session, SftpOptions::default())
-            .await
-            .expect("Could not establish impl");
+        let os2 = mk_openssh_session(&ssh_port).await.unwrap();
+        let gs1 = mk_openssh_session(&ssh_port).await.unwrap();
+        let gs2 = mk_openssh_session(&ssh_port).await.unwrap();
+        let implementation = OpensshLinux::new(gs1, gs2, SftpOptions::new()).await.unwrap();
 
         OpensshData {
-            ssh: owned_session,
-            sftp: owned_sftp,
+            ssh: os1,
+            sftp: Sftp::from_session(os2, SftpOptions::default()).await.unwrap(),
             implementation,
         }
     }
@@ -197,8 +180,9 @@ async fn mk_openssh_session(ssh_port: &u16) -> Result<Session, openssh::Error> {
     let str_dest = format!("ssh://root@localhost:{}", ssh_port);
     let (builder, dest) = builder.resolve(str_dest.as_str());
     let tempdir = builder.launch_master(dest).await?;
+    let session = Session::new_process_mux(tempdir);
 
-    Ok(Session::new_process_mux(tempdir))
+    Ok(session)
 }
 
 async fn get_ssh_port() -> u16 {

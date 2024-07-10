@@ -14,33 +14,19 @@ pub struct OpensshLinux {
 #[derive(Debug)]
 pub enum OpensshConnectionError {
     CheckError(openssh::Error),
-    SftpRequestError(openssh::Error),
-    SftpStdinNotFound,
-    SftpStdoutNotFound,
     SftpEstablishError(openssh_sftp_client::Error),
 }
 
 impl OpensshLinux {
-    pub async fn new(session: Session, sftp_options: SftpOptions) -> Result<OpensshLinux, OpensshConnectionError> {
+    pub async fn new(
+        session: Session,
+        sftp_session: Session,
+        sftp_options: SftpOptions,
+    ) -> Result<OpensshLinux, OpensshConnectionError> {
         session.check().await.map_err(OpensshConnectionError::CheckError)?;
-        let mut child = session
-            .subsystem("sftp")
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
+        let sftp = Sftp::from_session(sftp_session, sftp_options)
             .await
-            .map_err(OpensshConnectionError::SftpRequestError)?;
-
-        let sftp = Sftp::new(
-            child.stdin().take().ok_or(OpensshConnectionError::SftpStdinNotFound)?,
-            child
-                .stdout()
-                .take()
-                .ok_or(OpensshConnectionError::SftpStdoutNotFound)?,
-            sftp_options,
-        )
-        .await
-        .map_err(OpensshConnectionError::SftpEstablishError)?;
+            .map_err(OpensshConnectionError::SftpEstablishError)?;
 
         Ok(OpensshLinux {
             session: Arc::new(session),

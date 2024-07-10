@@ -19,13 +19,16 @@ russh-keys = { version = "0.43.0", optional = true }
 russh-sftp = { version = "2.0.1", optional = true }
 # openssh impl
 openssh = { version = "0.10.4", optional = true }
-openssh-sftp-client = { version = "0.14.4", optional = true }
+openssh-sftp-client = { version = "0.14.4", optional = true, features = [
+    "openssh",
+] }
 futures-util = { version = "0.3.30", optional = true }
 
 [dev-dependencies]
 uuid = { version = "1.9.1", features = ["v4"] }
 tokio = { version = "1.38.0", features = ["macros"] }
 testcontainers = "0.20.0"
+openssh = { version = "0.10.4", features = ["native-mux"] }
 remoteify = { path = ".", features = ["native", "ssh_russh", "ssh_openssh"] }
 
 [features]
