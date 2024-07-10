@@ -1,12 +1,12 @@
 use std::{
-    fs::{Metadata, Permissions},
+    fs::Metadata,
     os::unix::fs::{MetadataExt, PermissionsExt},
     path::Path,
 };
 
 use common::{entries_contain, gen_nested_tmp_path, gen_tmp_path};
 use remoteify::{
-    filesystem::{LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions},
+    filesystem::{LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions, LinuxPermissions},
     native::NativeLinux,
 };
 use tokio::{
@@ -185,7 +185,9 @@ async fn read_link_should_return_correct_location() {
 async fn set_permissions_should_perform_update() {
     let path = gen_tmp_path();
     write(&path, "content").await.unwrap();
-    IMPL.set_permissions(&path, Permissions::from_mode(777)).await.unwrap();
+    IMPL.set_permissions(&path, LinuxPermissions::from_bits(777).unwrap())
+        .await
+        .unwrap();
     let meta = metadata(&path).await.unwrap();
     assert_eq!(meta.permissions().mode(), 33545);
     remove_file(&path).await.unwrap();
@@ -275,7 +277,10 @@ async fn get_symlink_metadata_should_return_correct_result() {
 fn assert_metadata(expected_metadata: Metadata, actual_metadata: LinuxFileMetadata, _file_type: LinuxFileType) {
     assert!(matches!(actual_metadata.file_type().unwrap(), _file_type));
     assert_eq!(actual_metadata.size().unwrap(), expected_metadata.size());
-    assert_eq!(actual_metadata.permissions().unwrap(), expected_metadata.permissions());
+    assert_eq!(
+        actual_metadata.permissions().unwrap(),
+        LinuxPermissions::from_bits_retain(expected_metadata.permissions().mode())
+    );
     assert_eq!(
         actual_metadata.modified_time().unwrap(),
         expected_metadata.modified().unwrap()

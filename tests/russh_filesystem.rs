@@ -1,7 +1,7 @@
-use std::{fs::Permissions, os::unix::fs::PermissionsExt, path::Path};
+use std::path::Path;
 
 use common::{conv_path, conv_path_non_buf, entries_contain, gen_nested_tmp_path, gen_tmp_path, TestData};
-use remoteify::filesystem::{LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions};
+use remoteify::filesystem::{LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions, LinuxPermissions};
 use russh_sftp::protocol::FileAttributes;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -204,7 +204,7 @@ async fn set_permissions_should_perform_change() {
     let path = test_data.init_file("content").await;
     test_data
         .implementation
-        .set_permissions(&path, Permissions::from_mode(777))
+        .set_permissions(&path, LinuxPermissions::from_bits(777).unwrap())
         .await
         .expect("Call failed");
     assert_eq!(
@@ -327,7 +327,7 @@ fn assert_metadata(expected_metadata: FileAttributes, actual_metadata: LinuxFile
     assert!(matches!(actual_metadata.file_type().unwrap(), _file_type));
     assert_eq!(actual_metadata.size().unwrap(), expected_metadata.size.unwrap());
     assert_eq!(
-        actual_metadata.permissions().unwrap().mode(),
+        actual_metadata.permissions().unwrap().bits(),
         expected_metadata.permissions.unwrap()
     );
     assert_eq!(

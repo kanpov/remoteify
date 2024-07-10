@@ -1,15 +1,18 @@
 use std::{
-    fs::Permissions,
     io,
     path::{Path, PathBuf},
 };
 
 use async_trait::async_trait;
 use futures_util::StreamExt;
-use openssh_sftp_client::{file::TokioCompatFile, metadata::FileType};
-use unix_permissions_ext::UNIXPermissionsExt;
+use openssh_sftp_client::{
+    file::TokioCompatFile,
+    metadata::{FileType, MetaData, Permissions},
+};
 
-use crate::filesystem::{LinuxDirEntry, LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions};
+use crate::filesystem::{
+    LinuxDirEntry, LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions, LinuxPermissions,
+};
 
 use super::OpensshLinux;
 
@@ -111,24 +114,10 @@ impl LinuxFilesystem for OpensshLinux {
         sftp.fs().read_link(link_path).await.map_err(io::Error::other)
     }
 
-    async fn set_permissions(&self, path: &Path, permissions: Permissions) -> io::Result<()> {
+    async fn set_permissions(&self, path: &Path, permissions: LinuxPermissions) -> io::Result<()> {
         let sftp = self.sftp_mutex.lock().await;
-        let mut actual_permissions = openssh_sftp_client::metadata::Permissions::new();
-
-        actual_permissions.set_execute_by_owner(permissions.executable_by_owner());
-        actual_permissions.set_execute_by_group(permissions.executable_by_group());
-        actual_permissions.set_execute_by_other(permissions.executable_by_other());
-
-        actual_permissions.set_write_by_owner(permissions.writable_by_owner());
-        actual_permissions.set_write_by_group(permissions.writable_by_group());
-        actual_permissions.set_write_by_other(permissions.writable_by_other());
-
-        actual_permissions.set_read_by_owner(permissions.readable_by_owner());
-        actual_permissions.set_read_by_group(permissions.readable_by_group());
-        actual_permissions.set_read_by_other(permissions.readable_by_other());
-
         sftp.fs()
-            .set_permissions(path, actual_permissions)
+            .set_permissions(path, permissions.into())
             .await
             .map_err(io::Error::other)
     }
@@ -196,21 +185,11 @@ impl LinuxFilesystem for OpensshLinux {
 
     async fn get_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata> {
         let sftp = self.sftp_mutex.lock().await;
-        let metadata = sftp.fs().metadata(path).await.map_err(io::Error::other)?;
-
-        todo!()
-        // Ok(LinuxFileMetadata::new(
-        //     metadata.file_type().map(|file_type| file_type.into()),
-        //     metadata.len(),
-        //     metadata.permissions().map(|perms| perms.into()),
-        //     modified_time,
-        //     accessed_time,
-        //     created_time,
-        //     user_id,
-        //     user_name,
-        //     group_id,
-        //     group_name,
-        // ))
+        sftp.fs()
+            .metadata(path)
+            .await
+            .map_err(io::Error::other)
+            .map(|metadata| metadata.into())
     }
 
     async fn get_symlink_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata> {
@@ -227,6 +206,71 @@ async fn run_fs_command(instance: &OpensshLinux, program: &str, args: Vec<&str>)
         false => Err(io::Error::other(
             "underlying issued command exited with a non-zero status code",
         )),
+    }
+}
+
+impl Into<LinuxFileMetadata> for MetaData {
+    fn into(self) -> LinuxFileMetadata {
+        LinuxFileMetadata::new(
+            self.file_type().map(|file_type| file_type.into()),
+            self.len(),
+            self.permissions().map(|perms| perms.into()),
+            self.modified().map(|timestamp| timestamp.as_system_time()),
+            self.accessed().map(|timestamp| timestamp.as_system_time()),
+            None,
+            self.uid(),
+            None,
+            self.gid(),
+            None,
+        )
+    }
+}
+
+impl Into<Permissions> for LinuxPermissions {
+    fn into(self) -> Permissions {
+        let mut result = Permissions::new();
+
+        result.set_execute_by_owner(self.contains(LinuxPermissions::OWNER_EXECUTE));
+        result.set_execute_by_group(self.contains(LinuxPermissions::GROUP_EXECUTE));
+        result.set_execute_by_other(self.contains(LinuxPermissions::OTHER_EXECUTE));
+
+        result.set_write_by_owner(self.contains(LinuxPermissions::OWNER_WRITE));
+        result.set_write_by_group(self.contains(LinuxPermissions::GROUP_WRITE));
+        result.set_write_by_other(self.contains(LinuxPermissions::OTHER_WRITE));
+
+        result.set_read_by_owner(self.contains(LinuxPermissions::OWNER_READ));
+        result.set_read_by_group(self.contains(LinuxPermissions::GROUP_READ));
+        result.set_read_by_other(self.contains(LinuxPermissions::OWNER_READ));
+
+        result.set_suid(self.contains(LinuxPermissions::SET_UID));
+        result.set_sgid(self.contains(LinuxPermissions::SET_GID));
+        result.set_vtx(self.contains(LinuxPermissions::STICKY_BIT));
+
+        result
+    }
+}
+
+impl From<Permissions> for LinuxPermissions {
+    fn from(value: Permissions) -> Self {
+        let mut result = LinuxPermissions::empty();
+
+        result.set(LinuxPermissions::SET_UID, value.suid());
+        result.set(LinuxPermissions::SET_GID, value.sgid());
+        result.set(LinuxPermissions::STICKY_BIT, value.svtx());
+
+        result.set(LinuxPermissions::OWNER_EXECUTE, value.execute_by_owner());
+        result.set(LinuxPermissions::GROUP_EXECUTE, value.execute_by_group());
+        result.set(LinuxPermissions::OTHER_EXECUTE, value.execute_by_other());
+
+        result.set(LinuxPermissions::OWNER_WRITE, value.write_by_owner());
+        result.set(LinuxPermissions::GROUP_WRITE, value.write_by_group());
+        result.set(LinuxPermissions::OTHER_WRITE, value.write_by_other());
+
+        result.set(LinuxPermissions::OWNER_READ, value.read_by_owner());
+        result.set(LinuxPermissions::GROUP_READ, value.read_by_group());
+        result.set(LinuxPermissions::OTHER_READ, value.read_by_other());
+
+        result
     }
 }
 

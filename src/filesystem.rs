@@ -1,6 +1,7 @@
 use std::{
     fs::Permissions,
     io,
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     time::SystemTime,
 };
@@ -28,7 +29,7 @@ pub struct LinuxDirEntry {
 pub struct LinuxFileMetadata {
     file_type: Option<LinuxFileType>,
     size: Option<u64>,
-    permissions: Option<Permissions>,
+    permissions: Option<LinuxPermissions>,
     modified_time: Option<SystemTime>,
     accessed_time: Option<SystemTime>,
     created_time: Option<SystemTime>,
@@ -36,6 +37,30 @@ pub struct LinuxFileMetadata {
     user_name: Option<String>,
     group_id: Option<u32>,
     group_name: Option<String>,
+}
+
+bitflags::bitflags! {
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub struct LinuxPermissions: u32 {
+        const SET_UID = 0o4000;
+        const SET_GID = 0o2000;
+        const STICKY_BIT = 0o1000;
+
+        const OWNER_READ = 0o400;
+        const OWNER_WRITE = 0o200;
+        const OWNER_EXECUTE = 0o100;
+        const GROUP_READ = 0o040;
+        const GROUP_WRITE = 0o020;
+        const GROUP_EXECUTE = 0o010;
+        const OTHER_READ = 0o004;
+        const OTHER_WRITE = 0o002;
+        const OTHER_EXECUTE = 0o001;
+    }
+}
+
+pub enum LinuxPermissionsError {
+    CouldNotExtractMode,
+    UnknownBitSet,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -141,7 +166,7 @@ impl LinuxFileMetadata {
     pub(crate) fn new(
         file_type: Option<LinuxFileType>,
         size: Option<u64>,
-        permissions: Option<Permissions>,
+        permissions: Option<LinuxPermissions>,
         modified_time: Option<SystemTime>,
         accessed_time: Option<SystemTime>,
         created_time: Option<SystemTime>,
@@ -172,7 +197,7 @@ impl LinuxFileMetadata {
         self.size
     }
 
-    pub fn permissions(&self) -> Option<Permissions> {
+    pub fn permissions(&self) -> Option<LinuxPermissions> {
         self.permissions.clone()
     }
 
@@ -205,6 +230,24 @@ impl LinuxFileMetadata {
     }
 }
 
+impl TryFrom<Permissions> for LinuxPermissions {
+    type Error = LinuxPermissionsError;
+
+    fn try_from(value: Permissions) -> Result<Self, Self::Error> {
+        let mode = value
+            .mode()
+            .try_into()
+            .map_err(|_| LinuxPermissionsError::CouldNotExtractMode)?;
+        LinuxPermissions::from_bits(mode).ok_or(LinuxPermissionsError::UnknownBitSet)
+    }
+}
+
+impl Into<Permissions> for LinuxPermissions {
+    fn into(self) -> Permissions {
+        Permissions::from_mode(self.bits())
+    }
+}
+
 #[async_trait]
 pub trait LinuxFilesystem {
     async fn exists(&self, path: &Path) -> io::Result<bool>;
@@ -229,7 +272,7 @@ pub trait LinuxFilesystem {
 
     async fn read_link(&self, link_path: &Path) -> io::Result<PathBuf>;
 
-    async fn set_permissions(&self, path: &Path, permissions: Permissions) -> io::Result<()>;
+    async fn set_permissions(&self, path: &Path, permissions: LinuxPermissions) -> io::Result<()>;
 
     async fn remove_file(&self, path: &Path) -> io::Result<()>;
 

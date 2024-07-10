@@ -5,11 +5,13 @@ use tokio::fs::{
 };
 
 use super::NativeLinux;
-use crate::filesystem::{LinuxDirEntry, LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions};
+use crate::filesystem::{
+    LinuxDirEntry, LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions, LinuxPermissions,
+};
 use std::{
     fs::{FileType, Metadata, Permissions},
     io,
-    os::unix::fs::MetadataExt,
+    os::unix::fs::{MetadataExt, PermissionsExt},
     path::{Path, PathBuf},
 };
 
@@ -72,8 +74,8 @@ impl LinuxFilesystem for NativeLinux {
         read_link(link_path).await
     }
 
-    async fn set_permissions(&self, path: &Path, permissions: Permissions) -> io::Result<()> {
-        set_permissions(path, permissions).await
+    async fn set_permissions(&self, path: &Path, permissions: LinuxPermissions) -> io::Result<()> {
+        set_permissions(path, Permissions::from_mode(permissions.bits())).await
     }
 
     async fn remove_file(&self, path: &Path) -> io::Result<()> {
@@ -161,7 +163,7 @@ impl Into<LinuxFileMetadata> for Metadata {
         LinuxFileMetadata::new(
             Some(self.file_type().into()),
             Some(self.size()),
-            Some(self.permissions()),
+            Some(LinuxPermissions::from_bits_retain(self.permissions().mode())),
             self.modified().ok(),
             self.accessed().ok(),
             self.created().ok(),

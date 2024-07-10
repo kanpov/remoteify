@@ -1,8 +1,4 @@
-use std::{
-    fs::Permissions,
-    os::unix::fs::PermissionsExt,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use russh::{client, ChannelMsg};
@@ -12,7 +8,9 @@ use russh_sftp::{
 };
 use std::io::{self};
 
-use crate::filesystem::{LinuxDirEntry, LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions};
+use crate::filesystem::{
+    LinuxDirEntry, LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions, LinuxPermissions,
+};
 
 use super::RusshLinux;
 
@@ -107,7 +105,7 @@ where
             .map_err(io::Error::other)
     }
 
-    async fn set_permissions(&self, path: &Path, permissions: Permissions) -> io::Result<()> {
+    async fn set_permissions(&self, path: &Path, permissions: LinuxPermissions) -> io::Result<()> {
         self.sftp_session
             .set_metadata(
                 conv_path(path),
@@ -117,7 +115,7 @@ where
                     user: None,
                     gid: None,
                     group: None,
-                    permissions: Some(permissions.mode()),
+                    permissions: Some(permissions.bits()),
                     atime: None,
                     mtime: None,
                 },
@@ -279,7 +277,7 @@ impl Into<LinuxFileMetadata> for FileAttributes {
             Some(self.file_type().into()),
             self.size,
             match self.permissions {
-                Some(bit) => Some(Permissions::from_mode(bit)),
+                Some(bit) => Some(LinuxPermissions::from_bits_retain(bit)),
                 None => None,
             },
             self.modified().ok(),
