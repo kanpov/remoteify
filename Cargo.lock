@@ -1495,7 +1495,6 @@ dependencies = [
  "derive_destructure2",
  "futures-core",
  "once_cell",
- "openssh",
  "openssh-sftp-client-lowlevel",
  "openssh-sftp-error",
  "pin-project",
@@ -1529,7 +1528,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61a5aea093d714df10186f481a6003e3f906f6fc8360c026737a841f4f182996"
 dependencies = [
  "awaitable-error",
- "openssh",
  "openssh-sftp-protocol-error",
  "ssh_format_error",
  "thiserror",
