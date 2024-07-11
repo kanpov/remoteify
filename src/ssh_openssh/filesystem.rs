@@ -75,6 +75,7 @@ impl LinuxFilesystem for OpensshLinux {
         let mut new_file = sftp
             .options()
             .write(true)
+            .create(true)
             .truncate(true)
             .open(new_path)
             .await

@@ -100,3 +100,41 @@ async fn open_file_with_create_should_work() {
     writer.flush().await.unwrap();
     test_data.assert_file(&path, "content").await;
 }
+
+#[tokio::test]
+async fn create_file_should_persist() {
+    let test_data = OpensshData::setup().await;
+    let path = gen_tmp_path();
+    test_data.implementation.create_file(&path).await.expect("Call failed");
+    test_data.assert_file_exists(&path, true).await;
+}
+
+#[tokio::test]
+async fn rename_file_should_persist() {
+    let test_data = OpensshData::setup().await;
+    let old_path = gen_tmp_path();
+    let new_path = gen_tmp_path();
+    test_data.sftp.fs().write(&old_path, "new content").await.unwrap();
+    test_data
+        .implementation
+        .rename_file(&old_path, &new_path)
+        .await
+        .expect("Call failed");
+    test_data.assert_file_exists(&old_path, false).await;
+    test_data.assert_file(&new_path, "new content").await;
+}
+
+#[tokio::test]
+async fn copy_file_should_persist() {
+    let test_data = OpensshData::setup().await;
+    let old_path = gen_tmp_path();
+    let new_path = gen_tmp_path();
+    test_data.sftp.fs().write(&old_path, "content").await.unwrap();
+    test_data
+        .implementation
+        .copy_file(&old_path, &new_path)
+        .await
+        .expect("Call failed");
+    test_data.assert_file(&old_path, "content").await;
+    test_data.assert_file(&new_path, "content").await;
+}

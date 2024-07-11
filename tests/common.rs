@@ -49,7 +49,7 @@ pub struct RusshData {
 
 #[allow(unused)]
 pub struct OpensshData {
-    pub ssh: Session,
+    pub ssh: Arc<Session>,
     pub sftp: Sftp,
     pub implementation: OpensshLinux,
 }
@@ -149,26 +149,20 @@ impl OpensshData {
     #[allow(unused)]
     pub async fn setup() -> OpensshData {
         let ssh_port = get_ssh_port().await;
-        let os1;
 
-        loop {
-            match mk_openssh_session(&ssh_port).await {
-                Ok(session) => {
-                    os1 = session;
-                    break;
-                }
-                Err(_) => {}
-            }
-        }
+        let owned_session_arc = Arc::new(mk_openssh_session(&ssh_port).await.unwrap());
+        let owned_sftp = Sftp::from_clonable_session(owned_session_arc.clone(), SftpOptions::default())
+            .await
+            .unwrap();
 
-        let os2 = mk_openssh_session(&ssh_port).await.unwrap();
-        let gs1 = mk_openssh_session(&ssh_port).await.unwrap();
-        let gs2 = mk_openssh_session(&ssh_port).await.unwrap();
-        let implementation = OpensshLinux::new(gs1, gs2, SftpOptions::new()).await.unwrap();
+        let given_session = mk_openssh_session(&ssh_port).await.unwrap();
+        let implementation = OpensshLinux::with_new_sftp(given_session, SftpOptions::default())
+            .await
+            .unwrap();
 
         OpensshData {
-            ssh: os1,
-            sftp: Sftp::from_session(os2, SftpOptions::default()).await.unwrap(),
+            ssh: owned_session_arc,
+            sftp: owned_sftp,
             implementation,
         }
     }
@@ -179,13 +173,26 @@ impl OpensshData {
         let content_str = String::from_utf8(content_buf.to_vec()).unwrap();
         assert_eq!(content_str, expected_content);
     }
+
+    #[allow(unused)]
+    pub async fn assert_file_exists(&self, path: &PathBuf, exists: bool) {
+        assert_eq!(self.sftp.fs().metadata(&path).await.is_ok(), exists);
+    }
 }
 
 async fn mk_openssh_session(ssh_port: &u16) -> Result<Session, openssh::Error> {
     let builder = SessionBuilder::default();
     let str_dest = format!("ssh://root@localhost:{}", ssh_port);
     let (builder, dest) = builder.resolve(str_dest.as_str());
-    let tempdir = builder.launch_master(dest).await?;
+    let tempdir;
+
+    loop {
+        if let Ok(td) = builder.launch_master(dest).await {
+            tempdir = td;
+            break;
+        }
+    }
+
     let session = Session::new_process_mux(tempdir);
 
     Ok(session)

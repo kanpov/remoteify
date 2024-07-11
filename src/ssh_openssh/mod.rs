@@ -19,18 +19,26 @@ pub enum OpensshConnectionError {
 }
 
 impl OpensshLinux {
-    pub async fn new(
+    pub async fn with_known_sftp(session: Session, sftp: Sftp) -> Result<OpensshLinux, OpensshConnectionError> {
+        session.check().await.map_err(OpensshConnectionError::CheckError)?;
+        Ok(OpensshLinux {
+            session: Arc::new(session),
+            sftp_mutex: Arc::new(Mutex::new(sftp)),
+        })
+    }
+
+    pub async fn with_new_sftp(
         session: Session,
-        sftp_session: Session,
         sftp_options: SftpOptions,
     ) -> Result<OpensshLinux, OpensshConnectionError> {
         session.check().await.map_err(OpensshConnectionError::CheckError)?;
-        let sftp = Sftp::from_session(sftp_session, sftp_options)
+        let session_arc = Arc::new(session);
+        let sftp = Sftp::from_clonable_session(session_arc.clone(), sftp_options)
             .await
             .map_err(OpensshConnectionError::SftpEstablishError)?;
 
         Ok(OpensshLinux {
-            session: Arc::new(session),
+            session: session_arc,
             sftp_mutex: Arc::new(Mutex::new(sftp)),
         })
     }
