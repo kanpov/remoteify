@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use async_trait::async_trait;
 use russh::client;
 
@@ -16,20 +18,19 @@ where
 
     async fn reverse_forward_tcp(
         &mut self,
-        host: impl Into<String> + Send,
-        port: u32,
-    ) -> Result<u32, LinuxNetworkError> {
-        let mut handle = self.handle_mutex.lock().await;
-        handle
-            .tcpip_forward(host, port)
-            .await
-            .map_err(|err| LinuxNetworkError::Other(Box::new(err)))
+        _remote_host: impl Into<String> + Send,
+        _remote_port: u16,
+        _local_host: impl Into<String> + Send,
+        _local_port: u16,
+    ) -> Result<(), LinuxNetworkError> {
+        Err(LinuxNetworkError::UnsupportedOperation)
     }
 
     async fn reverse_forward_unix(
         &mut self,
-        _socket_path: impl Into<String> + Send,
-    ) -> Result<String, LinuxNetworkError> {
+        _remote_socket_path: impl Into<PathBuf> + Send,
+        _local_socket_path: impl Into<PathBuf> + Send,
+    ) -> Result<(), LinuxNetworkError> {
         Err(LinuxNetworkError::UnsupportedOperation)
     }
 }

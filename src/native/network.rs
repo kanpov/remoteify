@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use async_trait::async_trait;
 
 use crate::network::{LinuxNetwork, LinuxNetworkError};
@@ -12,16 +14,19 @@ impl LinuxNetwork for NativeLinux {
 
     async fn reverse_forward_tcp(
         &mut self,
-        _host: impl Into<String> + Send,
-        port: u32,
-    ) -> Result<u32, LinuxNetworkError> {
-        Ok(port)
+        _remote_host: impl Into<String> + Send,
+        _remote_port: u16,
+        _local_host: impl Into<String> + Send,
+        _local_port: u16,
+    ) -> Result<(), LinuxNetworkError> {
+        Ok(())
     }
 
     async fn reverse_forward_unix(
         &mut self,
-        socket_path: impl Into<String> + Send,
-    ) -> Result<String, LinuxNetworkError> {
-        Ok(socket_path.into())
+        _remote_socket_path: impl Into<PathBuf> + Send,
+        _local_socket_path: impl Into<PathBuf> + Send,
+    ) -> Result<(), LinuxNetworkError> {
+        Ok(())
     }
 }

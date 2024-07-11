@@ -51,6 +51,7 @@ impl LinuxFilesystem for OpensshLinux {
             actual_options.create(true);
         }
         if open_options.is_truncate() {
+            actual_options.create(true); // specificity of this impl
             actual_options.truncate(true);
         }
 

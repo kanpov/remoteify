@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use async_trait::async_trait;
 
 pub enum LinuxNetworkError {
@@ -11,12 +13,15 @@ pub trait LinuxNetwork {
 
     async fn reverse_forward_tcp(
         &mut self,
-        host: impl Into<String> + Send,
-        port: u32,
-    ) -> Result<u32, LinuxNetworkError>;
+        remote_host: impl Into<String> + Send,
+        remote_port: u16,
+        local_host: impl Into<String> + Send,
+        local_port: u16,
+    ) -> Result<(), LinuxNetworkError>;
 
     async fn reverse_forward_unix(
         &mut self,
-        socket_path: impl Into<String> + Send,
-    ) -> Result<String, LinuxNetworkError>;
+        remote_socket_path: impl Into<PathBuf> + Send,
+        local_socket_path: impl Into<PathBuf> + Send,
+    ) -> Result<(), LinuxNetworkError>;
 }

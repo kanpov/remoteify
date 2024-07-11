@@ -1,11 +1,10 @@
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
-    time::Duration,
 };
 
 use async_trait::async_trait;
-use openssh::{Session, SessionBuilder, Stdio};
+use openssh::{Session, SessionBuilder};
 use openssh_sftp_client::{Sftp, SftpOptions};
 use remoteify::{
     filesystem::{LinuxDirEntry, LinuxFileType},
@@ -172,6 +171,13 @@ impl OpensshData {
             sftp: Sftp::from_session(os2, SftpOptions::default()).await.unwrap(),
             implementation,
         }
+    }
+
+    #[allow(unused)]
+    pub async fn assert_file(&self, path: &PathBuf, expected_content: &str) {
+        let content_buf = self.sftp.fs().read(&path).await.unwrap();
+        let content_str = String::from_utf8(content_buf.to_vec()).unwrap();
+        assert_eq!(content_str, expected_content);
     }
 }
 
