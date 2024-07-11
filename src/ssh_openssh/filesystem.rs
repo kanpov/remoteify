@@ -1,6 +1,7 @@
 use std::{
     io,
     path::{Path, PathBuf},
+    pin::Pin,
 };
 
 use async_trait::async_trait;
@@ -34,7 +35,7 @@ impl LinuxFilesystem for OpensshLinux {
         Ok(())
     }
 
-    async fn open_file(&self, path: &Path, open_options: &LinuxOpenOptions) -> io::Result<TokioCompatFile> {
+    async fn open_file(&self, path: &Path, open_options: &LinuxOpenOptions) -> io::Result<Pin<Box<TokioCompatFile>>> {
         let sftp = self.sftp_mutex.lock().await;
         let mut actual_options = sftp.options();
         if open_options.is_read() {
@@ -53,11 +54,8 @@ impl LinuxFilesystem for OpensshLinux {
             actual_options.truncate(true);
         }
 
-        actual_options
-            .open(path)
-            .await
-            .map_err(io::Error::other)
-            .map(|file| file.into())
+        let tokio_compat_file = TokioCompatFile::new(actual_options.open(path).await.map_err(io::Error::other)?);
+        Ok(Box::pin(tokio_compat_file))
     }
 
     async fn rename_file(&self, old_path: &Path, new_path: &Path) -> io::Result<()> {

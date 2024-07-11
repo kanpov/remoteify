@@ -258,7 +258,7 @@ pub trait LinuxFilesystem {
         &self,
         path: &Path,
         open_options: &LinuxOpenOptions,
-    ) -> io::Result<impl AsyncReadExt + AsyncSeekExt + AsyncWriteExt>;
+    ) -> io::Result<impl AsyncReadExt + AsyncWriteExt + AsyncSeekExt>;
 
     async fn rename_file(&self, old_path: &Path, new_path: &Path) -> io::Result<()>;
 

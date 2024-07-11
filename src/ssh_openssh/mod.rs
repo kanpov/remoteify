@@ -1,8 +1,9 @@
 mod filesystem;
+mod wrapper;
 
 use std::sync::Arc;
 
-use openssh::{Session, Stdio};
+use openssh::Session;
 use openssh_sftp_client::{Sftp, SftpOptions};
 use tokio::sync::Mutex;
 
