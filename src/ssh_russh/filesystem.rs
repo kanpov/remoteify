@@ -89,12 +89,15 @@ where
     }
 
     async fn create_hard_link(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
-        run_fs_command(
-            self,
-            format!("ln {} {}", conv_path(source_path), conv_path(destination_path)),
-        )
-        .await
-        .map(|_| ())
+        match self
+            .sftp_session
+            .hardlink(conv_path(source_path), conv_path(destination_path))
+            .await
+            .map_err(io::Error::other)?
+        {
+            true => Ok(()),
+            false => Err(io::Error::other("SFTP server doesn't support the hardlink extension")),
+        }
     }
 
     async fn read_link(&self, link_path: &Path) -> io::Result<PathBuf> {
