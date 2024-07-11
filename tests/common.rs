@@ -178,6 +178,16 @@ impl OpensshData {
     pub async fn assert_file_exists(&self, path: &PathBuf, exists: bool) {
         assert_eq!(self.sftp.fs().metadata(&path).await.is_ok(), exists);
     }
+
+    #[allow(unused)]
+    pub async fn assert_dir_exists(&self, path: &Path, exists: bool) {
+        let metadata = self.sftp.fs().metadata(&path).await;
+        assert_eq!(exists, metadata.is_ok());
+
+        if exists {
+            assert!(metadata.unwrap().file_type().unwrap().is_dir());
+        }
+    }
 }
 
 async fn mk_openssh_session(ssh_port: &u16) -> Result<Session, openssh::Error> {

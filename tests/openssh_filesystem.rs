@@ -1,5 +1,8 @@
-use common::{gen_tmp_path, OpensshData};
-use remoteify::filesystem::{LinuxFilesystem, LinuxOpenOptions};
+use std::path::Path;
+
+use common::{entries_contain, gen_nested_tmp_path, gen_tmp_path, OpensshData};
+use openssh_sftp_client::metadata::MetaData;
+use remoteify::filesystem::{LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions, LinuxPermissions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 mod common;
@@ -137,4 +140,213 @@ async fn copy_file_should_persist() {
         .expect("Call failed");
     test_data.assert_file(&old_path, "content").await;
     test_data.assert_file(&new_path, "content").await;
+}
+
+#[tokio::test]
+async fn canonicalize_should_perform_operation() {
+    let test_data = OpensshData::setup().await;
+    assert_eq!(
+        "/tmp",
+        test_data
+            .implementation
+            .canonicalize(&Path::new("/tmp/../tmp/../tmp"))
+            .await
+            .expect("Call failed")
+            .to_str()
+            .unwrap()
+    );
+}
+
+#[tokio::test]
+async fn symlink_should_establish_link() {
+    let test_data = OpensshData::setup().await;
+    let src_path = gen_tmp_path();
+    let dst_path = gen_tmp_path();
+    test_data.sftp.fs().write(&src_path, "content").await.unwrap();
+    test_data
+        .implementation
+        .create_symlink(&src_path, &dst_path)
+        .await
+        .expect("Call failed");
+    test_data.assert_file_exists(&dst_path, true).await;
+    assert_eq!(test_data.sftp.fs().read_link(&dst_path).await.unwrap(), src_path);
+}
+
+#[tokio::test]
+async fn hard_link_should_establish_link() {
+    let test_data = OpensshData::setup().await;
+    let src_path = gen_tmp_path();
+    let dst_path = gen_tmp_path();
+    test_data.sftp.fs().write(&src_path, "content").await.unwrap();
+    test_data
+        .implementation
+        .create_hard_link(&src_path, &dst_path)
+        .await
+        .expect("Call failed");
+    test_data.assert_file(&dst_path, "content").await;
+}
+
+#[tokio::test]
+async fn read_link_should_return_correct_location() {
+    let test_data = OpensshData::setup().await;
+    let src_path = gen_tmp_path();
+    let dst_path = gen_tmp_path();
+    test_data.sftp.fs().symlink(&src_path, &dst_path).await.unwrap();
+    assert_eq!(
+        src_path,
+        test_data
+            .implementation
+            .read_link(&dst_path)
+            .await
+            .expect("Call failed")
+    );
+}
+
+#[tokio::test]
+async fn set_permissions_should_perform_update() {
+    let test_data = OpensshData::setup().await;
+    let path = gen_tmp_path();
+    test_data.sftp.fs().write(&path, "content").await.unwrap();
+    test_data
+        .implementation
+        .set_permissions(
+            &path,
+            LinuxPermissions::empty()
+                .union(LinuxPermissions::OWNER_READ)
+                .union(LinuxPermissions::OTHER_EXECUTE),
+        )
+        .await
+        .expect("Call failed");
+    let permissions = test_data
+        .sftp
+        .fs()
+        .metadata(&path)
+        .await
+        .unwrap()
+        .permissions()
+        .unwrap();
+    assert!(permissions.read_by_owner());
+    assert!(permissions.execute_by_other());
+}
+
+#[tokio::test]
+async fn remove_file_should_persist_changes() {
+    let test_data = OpensshData::setup().await;
+    let path = gen_tmp_path();
+    test_data.sftp.fs().write(&path, "sth").await.unwrap();
+    test_data.implementation.remove_file(&path).await.expect("Call failed");
+    test_data.assert_file_exists(&path, false).await;
+}
+
+#[tokio::test]
+async fn create_dir_should_persist() {
+    let test_data = OpensshData::setup().await;
+    let path = gen_tmp_path();
+    test_data.implementation.create_dir(&path).await.expect("Call failed");
+    test_data.assert_dir_exists(&path, true).await;
+}
+
+#[tokio::test]
+async fn create_dir_recursively_should_persist() {
+    let test_data = OpensshData::setup().await;
+    let path = gen_nested_tmp_path();
+    let parent_path = path.parent().unwrap();
+    test_data
+        .implementation
+        .create_dir_recursively(&path)
+        .await
+        .expect("Call failed");
+    test_data.assert_dir_exists(parent_path, true).await;
+    test_data.assert_dir_exists(&path, true).await;
+}
+
+#[tokio::test]
+async fn list_dir_returns_correct_results() {
+    let test_data = OpensshData::setup().await;
+    let file_path = gen_tmp_path();
+    test_data.sftp.fs().write(&file_path, "content").await.unwrap();
+    let dir_path = gen_tmp_path();
+    test_data.sftp.fs().create_dir(&dir_path).await.unwrap();
+    let symlink_path = gen_tmp_path();
+    test_data.sftp.fs().symlink(&file_path, &symlink_path).await.unwrap();
+
+    let entries = test_data
+        .implementation
+        .list_dir(Path::new("/tmp"))
+        .await
+        .expect("Call failed");
+    entries_contain(&entries, LinuxFileType::File, &file_path);
+    entries_contain(&entries, LinuxFileType::Dir, &dir_path);
+    entries_contain(&entries, LinuxFileType::Symlink, &symlink_path);
+}
+
+#[tokio::test]
+async fn remove_dir_should_persist() {
+    let test_data = OpensshData::setup().await;
+    let path = gen_tmp_path();
+    test_data.sftp.fs().create_dir(&path).await.unwrap();
+    test_data.implementation.remove_dir(&path).await.expect("Call failed");
+    test_data.assert_dir_exists(&path, false).await;
+}
+
+#[tokio::test]
+async fn remove_dir_recursively_should_persist() {
+    let test_data = OpensshData::setup().await;
+    let child_path = gen_nested_tmp_path();
+    let parent_path = child_path.parent().unwrap();
+    test_data.sftp.fs().create_dir(&parent_path).await.unwrap();
+    test_data.sftp.fs().create_dir(&child_path).await.unwrap();
+    test_data
+        .implementation
+        .remove_dir_recursively(&parent_path)
+        .await
+        .expect("Call failed");
+    test_data.assert_dir_exists(&parent_path, false).await;
+}
+
+#[tokio::test]
+async fn get_metadata_should_return_correct_result() {
+    let test_data = OpensshData::setup().await;
+    let path = gen_tmp_path();
+    test_data.sftp.fs().write(&path, "content").await.unwrap();
+    assert_metadata(
+        test_data.sftp.fs().metadata(&path).await.unwrap(),
+        test_data.implementation.get_metadata(&path).await.expect("Call failed"),
+        LinuxFileType::File,
+    );
+}
+
+#[tokio::test]
+async fn get_symlink_metadata_should_return_correct_result() {
+    let test_data = OpensshData::setup().await;
+    let src_path = gen_tmp_path();
+    let dst_path = gen_tmp_path();
+    test_data.sftp.fs().symlink(&src_path, &dst_path).await.unwrap();
+    assert_metadata(
+        test_data.sftp.fs().symlink_metadata(&dst_path).await.unwrap(),
+        test_data
+            .implementation
+            .get_symlink_metadata(&dst_path)
+            .await
+            .expect("Call failed"),
+        LinuxFileType::Symlink,
+    );
+}
+
+fn assert_metadata(expected_metadata: MetaData, actual_metadata: LinuxFileMetadata, _file_type: LinuxFileType) {
+    assert!(matches!(actual_metadata.file_type().unwrap(), _file_type));
+    assert_eq!(expected_metadata.len().unwrap(), actual_metadata.size().unwrap());
+    assert_eq!(
+        expected_metadata.modified().unwrap().as_system_time(),
+        actual_metadata.modified_time().unwrap()
+    );
+    assert_eq!(
+        expected_metadata.accessed().unwrap().as_system_time(),
+        actual_metadata.accessed_time().unwrap()
+    );
+    assert_eq!(actual_metadata.created_time(), None);
+    assert_eq!(expected_metadata.uid().unwrap(), actual_metadata.user_id().unwrap());
+    assert_eq!(expected_metadata.gid().unwrap(), actual_metadata.group_id().unwrap());
+    assert_eq!(actual_metadata.user_name(), None);
+    assert_eq!(actual_metadata.group_name(), None);
 }
