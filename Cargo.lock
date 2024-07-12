@@ -2027,6 +2027,7 @@ dependencies = [
  "async-trait",
  "bitflags",
  "bytes",
+ "futures",
  "futures-util",
  "once_cell",
  "openssh",

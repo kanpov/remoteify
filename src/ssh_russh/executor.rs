@@ -97,66 +97,74 @@ where
     async fn begin_execute(
         &self,
         process_configuration: &LinuxProcessConfiguration,
-    ) -> Result<RusshLinuxProcess, LinuxProcessError> {
-        let handle = self.handle_mutex.lock().await;
-        let mut channel = handle
-            .channel_open_session()
-            .await
-            .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
-        apply_process_configuration(&mut channel, process_configuration)
-            .await
-            .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
-
-        if process_configuration.redirect_stdout {
-            STDOUT_BUFFERS
-                .write()
-                .expect("Stdout rwlock was poisoned!")
-                .insert(channel.id(), BytesMut::new());
-        }
-        if process_configuration.redirect_stderr {
-            STDERR_BUFFERS
-                .write()
-                .expect("Stderr rwlock was poisoned!")
-                .insert(channel.id(), BytesMut::new());
-        }
-
-        if process_configuration.redirect_stdin {
-            channel
-                .request_pty(
-                    false,
-                    &self.pty_options.terminal,
-                    self.pty_options.col_width,
-                    self.pty_options.row_height,
-                    self.pty_options.pix_width,
-                    self.pty_options.pix_height,
-                    &self.pty_options.terminal_modes,
-                )
-                .await
-                .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
-        }
-
-        let stdin = Box::pin(channel.make_writer()) as Pin<Box<dyn AsyncWrite + Send>>;
-        let stdin_option = match process_configuration.redirect_stdin {
-            true => Some(stdin),
-            false => None,
-        };
-
-        Ok(RusshLinuxProcess {
-            channel_id: channel.id(),
-            channel_mutex: Arc::new(Mutex::new(channel)),
-            stdin: stdin_option,
-        })
+    ) -> Result<Box<dyn LinuxProcess>, LinuxProcessError> {
+        let process = begin_execute_internal(&self, process_configuration).await?;
+        Ok(Box::new(process))
     }
 
     async fn execute(
         &self,
         process_configuration: &LinuxProcessConfiguration,
     ) -> Result<LinuxProcessOutput, LinuxProcessError> {
-        let process = self.begin_execute(process_configuration).await?;
+        let process = begin_execute_internal(&self, process_configuration).await?;
         let mut channel = process.channel_mutex.lock().await;
         let status_code = await_process_exit(&mut channel).await;
         Ok(fetch_process_output(&channel.id(), status_code))
     }
+}
+
+async fn begin_execute_internal<'a, H: client::Handler>(
+    instance: &RusshLinux<H>,
+    process_configuration: &LinuxProcessConfiguration,
+) -> Result<RusshLinuxProcess<'a>, LinuxProcessError> {
+    let handle = instance.handle_mutex.lock().await;
+    let mut channel = handle
+        .channel_open_session()
+        .await
+        .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
+    apply_process_configuration(&mut channel, process_configuration)
+        .await
+        .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
+
+    if process_configuration.redirect_stdout {
+        STDOUT_BUFFERS
+            .write()
+            .expect("Stdout rwlock was poisoned!")
+            .insert(channel.id(), BytesMut::new());
+    }
+    if process_configuration.redirect_stderr {
+        STDERR_BUFFERS
+            .write()
+            .expect("Stderr rwlock was poisoned!")
+            .insert(channel.id(), BytesMut::new());
+    }
+
+    if process_configuration.redirect_stdin {
+        channel
+            .request_pty(
+                false,
+                &instance.pty_options.terminal,
+                instance.pty_options.col_width,
+                instance.pty_options.row_height,
+                instance.pty_options.pix_width,
+                instance.pty_options.pix_height,
+                &instance.pty_options.terminal_modes,
+            )
+            .await
+            .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
+    }
+
+    let stdin = Box::pin(channel.make_writer()) as Pin<Box<dyn AsyncWrite + Send>>;
+    let stdin_option = match process_configuration.redirect_stdin {
+        true => Some(stdin),
+        false => None,
+    };
+
+    Ok(RusshLinuxProcess {
+        channel_id: channel.id(),
+        channel_mutex: Arc::new(Mutex::new(channel)),
+        stdin: stdin_option,
+    })
 }
 
 async fn await_process_exit(channel: &mut Channel<Msg>) -> Option<i64> {
@@ -177,6 +185,16 @@ async fn await_process_exit(channel: &mut Channel<Msg>) -> Option<i64> {
 
 fn fetch_process_output(channel_id: &ChannelId, status_code: Option<i64>) -> LinuxProcessOutput {
     let partial_output = fetch_partial_process_output(channel_id);
+
+    STDOUT_BUFFERS
+        .write()
+        .expect("Stdout rwlock was poisoned!")
+        .remove(channel_id);
+    STDERR_BUFFERS
+        .write()
+        .expect("Stderr rwlock was poisoned!")
+        .remove(channel_id);
+
     LinuxProcessOutput {
         stdout: partial_output.stdout,
         stderr: partial_output.stderr,

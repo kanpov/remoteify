@@ -28,6 +28,7 @@ tokio = { version = "1.38.0", features = ["macros"] }
 testcontainers = "0.20.0"
 openssh = { version = "0.10.4", features = ["native-mux"] }
 remoteify = { path = ".", features = ["native", "ssh_russh", "ssh_openssh"] }
+futures = "0.3.30"
 
 [features]
 default = []

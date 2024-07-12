@@ -75,7 +75,7 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
         })
     }
 
-    async fn await_exit_with_output(self) -> Result<LinuxProcessOutput, LinuxProcessError> {
+    async fn await_exit_with_output(mut self) -> Result<LinuxProcessOutput, LinuxProcessError> {
         let os_output = self.child.wait_with_output().await.map_err(LinuxProcessError::IO)?;
         Ok(get_process_output(
             os_output,
@@ -102,7 +102,7 @@ impl LinuxExecutor for NativeLinux {
     async fn begin_execute(
         &self,
         process_configuration: &LinuxProcessConfiguration,
-    ) -> Result<NativeLinuxProcess, LinuxProcessError> {
+    ) -> Result<Box<dyn LinuxProcess>, LinuxProcessError> {
         let mut command = create_command_from_config(process_configuration);
         let mut child = command.spawn().map_err(LinuxProcessError::IO)?;
         let stdin = child.stdin.take();
@@ -128,13 +128,13 @@ impl LinuxExecutor for NativeLinux {
             }
         }
 
-        Ok(NativeLinuxProcess {
+        Ok(Box::new(NativeLinuxProcess {
             child,
             stdin,
             redirect_stdout: process_configuration.redirect_stdout,
             redirect_stderr: process_configuration.redirect_stderr,
             pid,
-        })
+        }))
     }
 
     async fn execute(

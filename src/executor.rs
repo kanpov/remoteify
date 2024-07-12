@@ -127,7 +127,7 @@ pub struct LinuxProcessPartialOutput {
 }
 
 #[async_trait]
-pub trait LinuxProcess: Sized {
+pub trait LinuxProcess {
     fn id(&self) -> Option<u32>;
 
     async fn write_to_stdin(&mut self, data: &[u8]) -> Result<usize, LinuxProcessError>;
@@ -146,11 +146,6 @@ pub trait LinuxProcess: Sized {
         self.begin_kill().await?;
         self.await_exit().await
     }
-
-    async fn kill_with_output(mut self) -> Result<LinuxProcessOutput, LinuxProcessError> {
-        self.begin_kill().await?;
-        self.await_exit_with_output().await
-    }
 }
 
 #[async_trait]
@@ -158,7 +153,7 @@ pub trait LinuxExecutor {
     async fn begin_execute(
         &self,
         process_configuration: &LinuxProcessConfiguration,
-    ) -> Result<impl LinuxProcess, LinuxProcessError>;
+    ) -> Result<Box<dyn LinuxProcess>, LinuxProcessError>;
 
     async fn execute(
         &self,
