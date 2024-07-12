@@ -1,6 +1,6 @@
-use std::path::Path;
+use std::ffi::OsString;
 
-use common::{conv_path, conv_path_non_buf, entries_contain, gen_nested_tmp_path, gen_tmp_path, RusshData};
+use common::{entries_contain, gen_nested_tmp_path, gen_tmp_path, RusshData};
 use remoteify::filesystem::{LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions, LinuxPermissions};
 use russh_sftp::protocol::FileAttributes;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -18,7 +18,7 @@ async fn exists_is_false_for_missing_item() {
 async fn exists_is_true_for_existent_file() {
     let test_data = RusshData::setup().await;
     let path = gen_tmp_path();
-    test_data.sftp.create(conv_path(&path)).await.unwrap();
+    test_data.sftp.create(path.to_string_lossy()).await.unwrap();
     assert!(test_data.implementation.exists(&path).await.expect("Call failed"));
 }
 
@@ -26,7 +26,7 @@ async fn exists_is_true_for_existent_file() {
 async fn exists_is_true_for_existent_dir() {
     let test_data = RusshData::setup().await;
     let path = gen_tmp_path();
-    test_data.sftp.create_dir(conv_path(&path)).await.unwrap();
+    test_data.sftp.create_dir(path.to_string_lossy()).await.unwrap();
     assert!(test_data.implementation.exists(&path).await.expect("Call failed"));
 }
 
@@ -101,7 +101,7 @@ async fn create_file_should_persist() {
     let test_data = RusshData::setup().await;
     let path = gen_tmp_path();
     test_data.implementation.create_file(&path).await.expect("Call failed");
-    assert!(test_data.sftp.try_exists(conv_path(&path)).await.unwrap());
+    assert!(test_data.sftp.try_exists(path.to_string_lossy()).await.unwrap());
 }
 
 #[tokio::test]
@@ -114,8 +114,8 @@ async fn rename_file_should_perform_change() {
         .rename_file(&old_path, &new_path)
         .await
         .expect("Call failed");
-    assert!(!test_data.sftp.try_exists(conv_path(&old_path)).await.unwrap());
-    assert!(test_data.sftp.try_exists(conv_path(&new_path)).await.unwrap());
+    assert!(!test_data.sftp.try_exists(old_path.to_string_lossy()).await.unwrap());
+    assert!(test_data.sftp.try_exists(new_path.to_string_lossy()).await.unwrap());
     test_data.assert_file(&new_path, "some content").await;
 }
 
@@ -139,7 +139,7 @@ async fn canonicalize_should_perform_transformation() {
     assert_eq!(
         test_data
             .implementation
-            .canonicalize(Path::new("/tmp/../tmp/../tmp"))
+            .canonicalize(&OsString::from("/tmp/../tmp/../tmp"))
             .await
             .expect("Call failed")
             .to_str()
@@ -159,7 +159,7 @@ async fn symlink_should_perform_linking() {
         .await
         .expect("Call failed");
     assert_eq!(
-        test_data.sftp.read_link(conv_path(&dst_path)).await.unwrap(),
+        test_data.sftp.read_link(dst_path.to_string_lossy()).await.unwrap(),
         src_path.to_str().unwrap()
     );
 }
@@ -185,7 +185,7 @@ async fn read_link_should_return_correct_source_path() {
     let dst_path = gen_tmp_path();
     test_data
         .sftp
-        .symlink(conv_path(&src_path), conv_path(&dst_path))
+        .symlink(src_path.to_string_lossy(), dst_path.to_string_lossy())
         .await
         .unwrap();
     assert_eq!(
@@ -210,7 +210,7 @@ async fn set_permissions_should_perform_change() {
     assert_eq!(
         test_data
             .sftp
-            .metadata(conv_path(&path))
+            .metadata(path.to_string_lossy())
             .await
             .unwrap()
             .permissions
@@ -224,7 +224,7 @@ async fn remove_file_should_persist_changes() {
     let test_data = RusshData::setup().await;
     let path = test_data.init_file("content").await;
     test_data.implementation.remove_file(&path).await.expect("Call failed");
-    assert!(!test_data.sftp.try_exists(conv_path(&path)).await.unwrap());
+    assert!(!test_data.sftp.try_exists(path.to_string_lossy()).await.unwrap());
 }
 
 #[tokio::test]
@@ -232,19 +232,19 @@ async fn create_dir_should_persist() {
     let test_data = RusshData::setup().await;
     let path = gen_tmp_path();
     test_data.implementation.create_dir(&path).await.expect("Call failed");
-    assert!(test_data.sftp.try_exists(conv_path(&path)).await.unwrap());
+    assert!(test_data.sftp.try_exists(path.to_string_lossy()).await.unwrap());
 }
 
 #[tokio::test]
 async fn create_dir_recursively_should_persist() {
     let test_data = RusshData::setup().await;
-    let path = gen_nested_tmp_path();
+    let (_, child_path) = gen_nested_tmp_path();
     test_data
         .implementation
-        .create_dir_recursively(&path)
+        .create_dir_recursively(&child_path)
         .await
         .expect("Call failed");
-    assert!(test_data.sftp.try_exists(conv_path(&path)).await.unwrap());
+    assert!(test_data.sftp.try_exists(child_path.to_string_lossy()).await.unwrap());
 }
 
 #[tokio::test]
@@ -252,17 +252,17 @@ async fn list_dir_returns_correct_results() {
     let test_data = RusshData::setup().await;
     let file_path = test_data.init_file("content").await;
     let dir_path = gen_tmp_path();
-    test_data.sftp.create_dir(conv_path(&dir_path)).await.unwrap();
+    test_data.sftp.create_dir(dir_path.to_string_lossy()).await.unwrap();
     let symlink_path = gen_tmp_path();
     test_data
         .sftp
-        .symlink(conv_path(&file_path), conv_path(&symlink_path))
+        .symlink(file_path.to_string_lossy(), symlink_path.to_string_lossy())
         .await
         .unwrap();
 
     let entries = test_data
         .implementation
-        .list_dir(Path::new("/tmp"))
+        .list_dir(&OsString::from("/tmp"))
         .await
         .expect("Call failed");
 
@@ -275,31 +275,30 @@ async fn list_dir_returns_correct_results() {
 async fn remove_dir_should_persist() {
     let test_data = RusshData::setup().await;
     let path = gen_tmp_path();
-    test_data.sftp.create_dir(conv_path(&path)).await.unwrap();
+    test_data.sftp.create_dir(path.to_string_lossy()).await.unwrap();
     test_data.implementation.remove_dir(&path).await.expect("Call failed");
-    assert!(!test_data.sftp.try_exists(conv_path(&path)).await.unwrap());
+    assert!(!test_data.sftp.try_exists(path.to_string_lossy()).await.unwrap());
 }
 
 #[tokio::test]
 async fn remove_dir_recursively_should_persist() {
     let test_data = RusshData::setup().await;
-    let path = gen_nested_tmp_path();
-    let parent_path = path.parent().unwrap();
-    test_data.sftp.create_dir(conv_path_non_buf(parent_path)).await.unwrap();
-    test_data.sftp.create_dir(conv_path(&path)).await.unwrap();
+    let (parent_path, child_path) = gen_nested_tmp_path();
+    test_data.sftp.create_dir(parent_path.to_string_lossy()).await.unwrap();
+    test_data.sftp.create_dir(child_path.to_string_lossy()).await.unwrap();
     test_data
         .implementation
-        .remove_dir_recursively(parent_path)
+        .remove_dir_recursively(&parent_path)
         .await
         .expect("Call failed");
-    assert!(!test_data.sftp.try_exists(conv_path_non_buf(parent_path)).await.unwrap());
+    assert!(!test_data.sftp.try_exists(parent_path.to_string_lossy()).await.unwrap());
 }
 
 #[tokio::test]
 async fn get_metadata_should_return_correct_result() {
     let test_data = RusshData::setup().await;
     let path = test_data.init_file("content").await;
-    let expected_metadata = test_data.sftp.metadata(conv_path(&path)).await.unwrap();
+    let expected_metadata = test_data.sftp.metadata(path.to_string_lossy()).await.unwrap();
     let actual_metadata = test_data.implementation.get_metadata(&path).await.expect("Call failed");
     assert_metadata(expected_metadata, actual_metadata, LinuxFileType::File);
 }
@@ -311,10 +310,14 @@ async fn get_symlink_metadata_should_return_correct_result() {
     let symlink_path = gen_tmp_path();
     test_data
         .sftp
-        .symlink(conv_path(&src_path), conv_path(&symlink_path))
+        .symlink(src_path.to_string_lossy(), symlink_path.to_string_lossy())
         .await
         .unwrap();
-    let expected_metadata = test_data.sftp.symlink_metadata(conv_path(&symlink_path)).await.unwrap();
+    let expected_metadata = test_data
+        .sftp
+        .symlink_metadata(symlink_path.to_string_lossy())
+        .await
+        .unwrap();
     let actual_metadata = test_data
         .implementation
         .get_symlink_metadata(&symlink_path)

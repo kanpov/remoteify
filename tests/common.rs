@@ -1,5 +1,5 @@
 use std::{
-    path::{Path, PathBuf},
+    ffi::{OsStr, OsString},
     sync::Arc,
 };
 
@@ -24,17 +24,16 @@ use testcontainers::{core::ContainerPort, runners::AsyncRunner, GenericImage};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
-pub fn gen_tmp_path() -> PathBuf {
-    PathBuf::from(format!("/tmp/{}", Uuid::new_v4().to_string()))
+pub fn gen_tmp_path() -> OsString {
+    format!("/tmp/{}", Uuid::new_v4().to_string()).into()
 }
 
 #[allow(unused)]
-pub fn gen_nested_tmp_path() -> PathBuf {
-    PathBuf::from(format!(
-        "/tmp/{}/{}",
-        Uuid::new_v4().to_string(),
-        Uuid::new_v4().to_string()
-    ))
+pub fn gen_nested_tmp_path() -> (OsString, OsString) {
+    let id1 = Uuid::new_v4().to_string();
+    let id2 = Uuid::new_v4().to_string();
+
+    (format!("/tmp/{}", id1).into(), format!("/tmp/{}/{}", id1, id2).into())
 }
 
 #[allow(unused)]
@@ -131,16 +130,19 @@ impl RusshData {
     }
 
     #[allow(unused)]
-    pub async fn init_file(&self, content: &str) -> PathBuf {
+    pub async fn init_file(&self, content: &str) -> OsString {
         let path = gen_tmp_path();
-        self.sftp.create(conv_path(&path)).await.unwrap();
-        self.sftp.write(conv_path(&path), content.as_bytes()).await.unwrap();
+        self.sftp.create(path.to_string_lossy()).await.unwrap();
+        self.sftp
+            .write(path.to_string_lossy(), content.as_bytes())
+            .await
+            .unwrap();
         path
     }
 
     #[allow(unused)]
-    pub async fn assert_file(&self, path: &PathBuf, expected_content: &str) {
-        let actual_content = String::from_utf8(self.sftp.read(conv_path(&path)).await.unwrap()).unwrap();
+    pub async fn assert_file(&self, path: &OsStr, expected_content: &str) {
+        let actual_content = String::from_utf8(self.sftp.read(path.to_string_lossy()).await.unwrap()).unwrap();
         assert_eq!(actual_content, expected_content);
     }
 }
@@ -168,19 +170,19 @@ impl OpensshData {
     }
 
     #[allow(unused)]
-    pub async fn assert_file(&self, path: &PathBuf, expected_content: &str) {
+    pub async fn assert_file(&self, path: &OsStr, expected_content: &str) {
         let content_buf = self.sftp.fs().read(&path).await.unwrap();
         let content_str = String::from_utf8(content_buf.to_vec()).unwrap();
         assert_eq!(content_str, expected_content);
     }
 
     #[allow(unused)]
-    pub async fn assert_file_exists(&self, path: &PathBuf, exists: bool) {
+    pub async fn assert_file_exists(&self, path: &OsStr, exists: bool) {
         assert_eq!(self.sftp.fs().metadata(&path).await.is_ok(), exists);
     }
 
     #[allow(unused)]
-    pub async fn assert_dir_exists(&self, path: &Path, exists: bool) {
+    pub async fn assert_dir_exists(&self, path: &OsStr, exists: bool) {
         let metadata = self.sftp.fs().metadata(&path).await;
         assert_eq!(exists, metadata.is_ok());
 
@@ -228,22 +230,13 @@ async fn get_ssh_port() -> u16 {
 }
 
 #[allow(unused)]
-pub fn conv_path(path: &PathBuf) -> String {
-    path.to_str().unwrap().into()
-}
-
-#[allow(unused)]
-pub fn conv_path_non_buf(path: &Path) -> String {
-    path.to_str().unwrap().into()
-}
-
-#[allow(unused)]
-pub fn entries_contain(entries: &Vec<LinuxDirEntry>, expected_type: LinuxFileType, expected_path: &PathBuf) {
-    assert!(entries.iter().any(|entry| {
-        matches!(entry.file_type(), expected_type)
-            && entry.path().as_os_str() == expected_path.as_os_str()
-            && entry.name().as_str() == expected_path.file_name().unwrap()
-    }))
+pub fn entries_contain(entries: &Vec<LinuxDirEntry>, expected_type: LinuxFileType, expected_path: &OsStr) {
+    dbg!(entries);
+    dbg!(expected_path);
+    dbg!(expected_type);
+    assert!(entries
+        .iter()
+        .any(|entry| { matches!(entry.file_type(), expected_type) && entry.path().as_os_str() == expected_path }))
 }
 
 #[derive(Debug)]

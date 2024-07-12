@@ -1,8 +1,8 @@
 use std::{
+    ffi::{OsStr, OsString},
     fs::Permissions,
     io,
     os::unix::fs::PermissionsExt,
-    path::{Path, PathBuf},
     time::SystemTime,
 };
 
@@ -20,9 +20,9 @@ pub struct LinuxOpenOptions {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct LinuxDirEntry {
-    name: String,
+    name: OsString,
     file_type: LinuxFileType,
-    path: PathBuf,
+    path: OsString,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -72,7 +72,7 @@ pub enum LinuxFileType {
 }
 
 impl LinuxDirEntry {
-    pub(crate) fn new(entry_name: String, entry_type: LinuxFileType, entry_path: PathBuf) -> LinuxDirEntry {
+    pub(crate) fn new(entry_name: OsString, entry_type: LinuxFileType, entry_path: OsString) -> LinuxDirEntry {
         LinuxDirEntry {
             name: entry_name,
             file_type: entry_type,
@@ -80,7 +80,7 @@ impl LinuxDirEntry {
         }
     }
 
-    pub fn name(&self) -> String {
+    pub fn name(&self) -> OsString {
         self.name.clone()
     }
 
@@ -88,7 +88,7 @@ impl LinuxDirEntry {
         self.file_type
     }
 
-    pub fn path(&self) -> PathBuf {
+    pub fn path(&self) -> OsString {
         self.path.clone()
     }
 }
@@ -235,43 +235,43 @@ impl From<LinuxPermissions> for Permissions {
 
 #[async_trait]
 pub trait LinuxFilesystem {
-    async fn exists(&self, path: &Path) -> io::Result<bool>;
+    async fn exists(&self, path: &OsStr) -> io::Result<bool>;
 
-    async fn create_file(&self, path: &Path) -> io::Result<()>;
+    async fn create_file(&self, path: &OsStr) -> io::Result<()>;
 
     async fn open_file(
         &self,
-        path: &Path,
+        path: &OsStr,
         open_options: &LinuxOpenOptions,
     ) -> io::Result<impl AsyncReadExt + AsyncWriteExt + AsyncSeekExt>;
 
-    async fn rename_file(&self, old_path: &Path, new_path: &Path) -> io::Result<()>;
+    async fn rename_file(&self, old_path: &OsStr, new_path: &OsStr) -> io::Result<()>;
 
-    async fn copy_file(&self, old_path: &Path, new_path: &Path) -> io::Result<Option<u64>>;
+    async fn copy_file(&self, old_path: &OsStr, new_path: &OsStr) -> io::Result<Option<u64>>;
 
-    async fn canonicalize(&self, path: &Path) -> io::Result<PathBuf>;
+    async fn canonicalize(&self, path: &OsStr) -> io::Result<OsString>;
 
-    async fn create_symlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()>;
+    async fn create_symlink(&self, source_path: &OsStr, destination_path: &OsStr) -> io::Result<()>;
 
-    async fn create_hard_link(&self, source_path: &Path, destination_path: &Path) -> io::Result<()>;
+    async fn create_hard_link(&self, source_path: &OsStr, destination_path: &OsStr) -> io::Result<()>;
 
-    async fn read_link(&self, link_path: &Path) -> io::Result<PathBuf>;
+    async fn read_link(&self, path: &OsStr) -> io::Result<OsString>;
 
-    async fn set_permissions(&self, path: &Path, permissions: LinuxPermissions) -> io::Result<()>;
+    async fn set_permissions(&self, path: &OsStr, permissions: LinuxPermissions) -> io::Result<()>;
 
-    async fn remove_file(&self, path: &Path) -> io::Result<()>;
+    async fn remove_file(&self, path: &OsStr) -> io::Result<()>;
 
-    async fn create_dir(&self, path: &Path) -> io::Result<()>;
+    async fn create_dir(&self, path: &OsStr) -> io::Result<()>;
 
-    async fn create_dir_recursively(&self, path: &Path) -> io::Result<()>;
+    async fn create_dir_recursively(&self, path: &OsStr) -> io::Result<()>;
 
-    async fn list_dir(&self, path: &Path) -> io::Result<Vec<LinuxDirEntry>>;
+    async fn list_dir(&self, path: &OsStr) -> io::Result<Vec<LinuxDirEntry>>;
 
-    async fn remove_dir(&self, path: &Path) -> io::Result<()>;
+    async fn remove_dir(&self, path: &OsStr) -> io::Result<()>;
 
-    async fn remove_dir_recursively(&self, path: &Path) -> io::Result<()>;
+    async fn remove_dir_recursively(&self, path: &OsStr) -> io::Result<()>;
 
-    async fn get_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata>;
+    async fn get_metadata(&self, path: &OsStr) -> io::Result<LinuxFileMetadata>;
 
-    async fn get_symlink_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata>;
+    async fn get_symlink_metadata(&self, path: &OsStr) -> io::Result<LinuxFileMetadata>;
 }

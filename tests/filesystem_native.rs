@@ -1,7 +1,7 @@
 use std::{
+    ffi::OsString,
     fs::Metadata,
     os::unix::fs::{MetadataExt, PermissionsExt},
-    path::Path,
 };
 
 use common::{entries_contain, gen_nested_tmp_path, gen_tmp_path};
@@ -140,7 +140,7 @@ async fn copy_file_should_persist() {
 #[tokio::test]
 async fn canonicalize_should_perform_operation() {
     let canonicalized_path = IMPL
-        .canonicalize(Path::new("/tmp/../tmp/../tmp"))
+        .canonicalize(&OsString::from("/tmp/../tmp/../tmp"))
         .await
         .expect("Call failed");
     assert_eq!(canonicalized_path.to_str().unwrap(), "/tmp");
@@ -212,10 +212,10 @@ async fn create_dir_should_persist() {
 
 #[tokio::test]
 async fn create_dir_recursively_should_persist() {
-    let path = gen_nested_tmp_path();
-    IMPL.create_dir_recursively(&path).await.expect("Call failed");
-    assert!(try_exists(&path).await.unwrap());
-    remove_dir_all(&path.parent().unwrap()).await.unwrap();
+    let (parent_path, child_path) = gen_nested_tmp_path();
+    IMPL.create_dir_recursively(&child_path).await.expect("Call failed");
+    assert!(try_exists(&child_path).await.unwrap());
+    remove_dir_all(&parent_path).await.unwrap();
 }
 
 #[tokio::test]
@@ -227,7 +227,7 @@ async fn list_dir_returns_correct_results() {
     let symlink_path = gen_tmp_path();
     symlink(&file_path, &symlink_path).await.unwrap();
 
-    let entries = IMPL.list_dir(Path::new("/tmp")).await.expect("Call failed");
+    let entries = IMPL.list_dir(&OsString::from("/tmp")).await.expect("Call failed");
 
     entries_contain(&entries, LinuxFileType::File, &file_path);
     entries_contain(&entries, LinuxFileType::Dir, &dir_path);
@@ -244,9 +244,8 @@ async fn remove_dir_should_persist() {
 
 #[tokio::test]
 async fn remove_dir_recursively_should_persist() {
-    let path = gen_nested_tmp_path();
-    let parent_path = path.parent().unwrap();
-    create_dir_all(&path).await.unwrap();
+    let (parent_path, child_path) = gen_nested_tmp_path();
+    create_dir_all(&child_path).await.unwrap();
     IMPL.remove_dir_recursively(&parent_path).await.expect("Call failed");
     assert!(!try_exists(&parent_path).await.unwrap());
 }

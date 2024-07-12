@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::ffi::OsString;
 
 use common::{entries_contain, gen_nested_tmp_path, gen_tmp_path, OpensshData};
 use openssh_sftp_client::metadata::MetaData;
@@ -149,7 +149,7 @@ async fn canonicalize_should_perform_operation() {
         "/tmp",
         test_data
             .implementation
-            .canonicalize(&Path::new("/tmp/../tmp/../tmp"))
+            .canonicalize(&OsString::from("/tmp/../tmp/../tmp"))
             .await
             .expect("Call failed")
             .to_str()
@@ -249,15 +249,14 @@ async fn create_dir_should_persist() {
 #[tokio::test]
 async fn create_dir_recursively_should_persist() {
     let test_data = OpensshData::setup().await;
-    let path = gen_nested_tmp_path();
-    let parent_path = path.parent().unwrap();
+    let (parent_path, child_path) = gen_nested_tmp_path();
     test_data
         .implementation
-        .create_dir_recursively(&path)
+        .create_dir_recursively(&child_path)
         .await
         .expect("Call failed");
-    test_data.assert_dir_exists(parent_path, true).await;
-    test_data.assert_dir_exists(&path, true).await;
+    test_data.assert_dir_exists(&parent_path, true).await;
+    test_data.assert_dir_exists(&child_path, true).await;
 }
 
 #[tokio::test]
@@ -272,7 +271,7 @@ async fn list_dir_returns_correct_results() {
 
     let entries = test_data
         .implementation
-        .list_dir(Path::new("/tmp"))
+        .list_dir(&OsString::from("/tmp"))
         .await
         .expect("Call failed");
     entries_contain(&entries, LinuxFileType::File, &file_path);
@@ -292,8 +291,7 @@ async fn remove_dir_should_persist() {
 #[tokio::test]
 async fn remove_dir_recursively_should_persist() {
     let test_data = OpensshData::setup().await;
-    let child_path = gen_nested_tmp_path();
-    let parent_path = child_path.parent().unwrap();
+    let (parent_path, child_path) = gen_nested_tmp_path();
     test_data.sftp.fs().create_dir(&parent_path).await.unwrap();
     test_data.sftp.fs().create_dir(&child_path).await.unwrap();
     test_data

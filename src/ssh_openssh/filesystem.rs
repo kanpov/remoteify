@@ -1,6 +1,7 @@
 use std::{
+    ffi::{OsStr, OsString},
     io,
-    path::{Path, PathBuf},
+    path::PathBuf,
     pin::Pin,
 };
 
@@ -19,12 +20,12 @@ use super::OpensshLinux;
 
 #[async_trait]
 impl LinuxFilesystem for OpensshLinux {
-    async fn exists(&self, path: &Path) -> io::Result<bool> {
+    async fn exists(&self, path: &OsStr) -> io::Result<bool> {
         let sftp = self.sftp_mutex.lock().await;
         Ok(sftp.fs().metadata(path).await.is_ok())
     }
 
-    async fn create_file(&self, path: &Path) -> io::Result<()> {
+    async fn create_file(&self, path: &OsStr) -> io::Result<()> {
         let sftp = self.sftp_mutex.lock().await;
         sftp.create(path)
             .await
@@ -35,7 +36,7 @@ impl LinuxFilesystem for OpensshLinux {
         Ok(())
     }
 
-    async fn open_file(&self, path: &Path, open_options: &LinuxOpenOptions) -> io::Result<Pin<Box<TokioCompatFile>>> {
+    async fn open_file(&self, path: &OsStr, open_options: &LinuxOpenOptions) -> io::Result<Pin<Box<TokioCompatFile>>> {
         let sftp = self.sftp_mutex.lock().await;
         let mut actual_options = sftp.options();
         if open_options.is_read() {
@@ -59,12 +60,12 @@ impl LinuxFilesystem for OpensshLinux {
         Ok(Box::pin(tokio_compat_file))
     }
 
-    async fn rename_file(&self, old_path: &Path, new_path: &Path) -> io::Result<()> {
+    async fn rename_file(&self, old_path: &OsStr, new_path: &OsStr) -> io::Result<()> {
         let sftp = self.sftp_mutex.lock().await;
         sftp.fs().rename(old_path, new_path).await.map_err(io::Error::other)
     }
 
-    async fn copy_file(&self, old_path: &Path, new_path: &Path) -> io::Result<Option<u64>> {
+    async fn copy_file(&self, old_path: &OsStr, new_path: &OsStr) -> io::Result<Option<u64>> {
         let sftp = self.sftp_mutex.lock().await;
         let mut old_file = sftp
             .options()
@@ -88,12 +89,16 @@ impl LinuxFilesystem for OpensshLinux {
         Ok(Some(offset))
     }
 
-    async fn canonicalize(&self, path: &Path) -> io::Result<PathBuf> {
+    async fn canonicalize(&self, path: &OsStr) -> io::Result<OsString> {
         let sftp = self.sftp_mutex.lock().await;
-        sftp.fs().canonicalize(path).await.map_err(io::Error::other)
+        sftp.fs()
+            .canonicalize(path)
+            .await
+            .map_err(io::Error::other)
+            .map(|path| path.into_os_string())
     }
 
-    async fn create_symlink(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
+    async fn create_symlink(&self, source_path: &OsStr, destination_path: &OsStr) -> io::Result<()> {
         let sftp = self.sftp_mutex.lock().await;
         sftp.fs()
             .symlink(source_path, destination_path)
@@ -101,7 +106,7 @@ impl LinuxFilesystem for OpensshLinux {
             .map_err(io::Error::other)
     }
 
-    async fn create_hard_link(&self, source_path: &Path, destination_path: &Path) -> io::Result<()> {
+    async fn create_hard_link(&self, source_path: &OsStr, destination_path: &OsStr) -> io::Result<()> {
         let sftp = self.sftp_mutex.lock().await;
         sftp.fs()
             .hard_link(source_path, destination_path)
@@ -109,12 +114,16 @@ impl LinuxFilesystem for OpensshLinux {
             .map_err(io::Error::other)
     }
 
-    async fn read_link(&self, link_path: &Path) -> io::Result<PathBuf> {
+    async fn read_link(&self, link_path: &OsStr) -> io::Result<OsString> {
         let sftp = self.sftp_mutex.lock().await;
-        sftp.fs().read_link(link_path).await.map_err(io::Error::other)
+        sftp.fs()
+            .read_link(link_path)
+            .await
+            .map_err(io::Error::other)
+            .map(|path| path.into_os_string())
     }
 
-    async fn set_permissions(&self, path: &Path, permissions: LinuxPermissions) -> io::Result<()> {
+    async fn set_permissions(&self, path: &OsStr, permissions: LinuxPermissions) -> io::Result<()> {
         let sftp = self.sftp_mutex.lock().await;
         sftp.fs()
             .set_permissions(path, permissions.into())
@@ -122,17 +131,17 @@ impl LinuxFilesystem for OpensshLinux {
             .map_err(io::Error::other)
     }
 
-    async fn remove_file(&self, path: &Path) -> io::Result<()> {
+    async fn remove_file(&self, path: &OsStr) -> io::Result<()> {
         let sftp = self.sftp_mutex.lock().await;
         sftp.fs().remove_file(path).await.map_err(io::Error::other)
     }
 
-    async fn create_dir(&self, path: &Path) -> io::Result<()> {
+    async fn create_dir(&self, path: &OsStr) -> io::Result<()> {
         let sftp = self.sftp_mutex.lock().await;
         sftp.fs().create_dir(path).await.map_err(io::Error::other)
     }
 
-    async fn create_dir_recursively(&self, path: &Path) -> io::Result<()> {
+    async fn create_dir_recursively(&self, path: &OsStr) -> io::Result<()> {
         run_fs_command(
             &self,
             "mkdir",
@@ -145,7 +154,7 @@ impl LinuxFilesystem for OpensshLinux {
         .await
     }
 
-    async fn list_dir(&self, path: &Path) -> io::Result<Vec<LinuxDirEntry>> {
+    async fn list_dir(&self, path: &OsStr) -> io::Result<Vec<LinuxDirEntry>> {
         let sftp = self.sftp_mutex.lock().await;
         let read_dir = sftp.fs().open_dir(path).await.map_err(io::Error::other)?.read_dir();
         tokio::pin!(read_dir);
@@ -153,12 +162,12 @@ impl LinuxFilesystem for OpensshLinux {
 
         while let Some(dir_entry_result) = read_dir.next().await {
             let dir_entry = dir_entry_result.map_err(io::Error::other)?;
-            let entry_path = path.join(dir_entry.filename());
+            let entry_path = PathBuf::from(path).join(dir_entry.filename()).into_os_string();
             let entry_type: LinuxFileType = dir_entry
                 .file_type()
                 .ok_or(io::Error::other("file has no type"))?
                 .into();
-            let entry_name = dir_entry.filename().to_string_lossy().to_string();
+            let entry_name = dir_entry.filename().as_os_str().to_os_string();
 
             entries.push(LinuxDirEntry::new(entry_name, entry_type, entry_path));
         }
@@ -166,12 +175,12 @@ impl LinuxFilesystem for OpensshLinux {
         Ok(entries)
     }
 
-    async fn remove_dir(&self, path: &Path) -> io::Result<()> {
+    async fn remove_dir(&self, path: &OsStr) -> io::Result<()> {
         let sftp = self.sftp_mutex.lock().await;
         sftp.fs().remove_dir(path).await.map_err(io::Error::other)
     }
 
-    async fn remove_dir_recursively(&self, path: &Path) -> io::Result<()> {
+    async fn remove_dir_recursively(&self, path: &OsStr) -> io::Result<()> {
         run_fs_command(
             &self,
             "rm",
@@ -183,7 +192,7 @@ impl LinuxFilesystem for OpensshLinux {
         .await
     }
 
-    async fn get_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata> {
+    async fn get_metadata(&self, path: &OsStr) -> io::Result<LinuxFileMetadata> {
         let sftp = self.sftp_mutex.lock().await;
         sftp.fs()
             .metadata(path)
@@ -192,7 +201,7 @@ impl LinuxFilesystem for OpensshLinux {
             .map(|metadata| metadata.into())
     }
 
-    async fn get_symlink_metadata(&self, path: &Path) -> io::Result<LinuxFileMetadata> {
+    async fn get_symlink_metadata(&self, path: &OsStr) -> io::Result<LinuxFileMetadata> {
         let sftp = self.sftp_mutex.lock().await;
         sftp.fs()
             .symlink_metadata(path)
