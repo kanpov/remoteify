@@ -253,8 +253,8 @@ where
 {
     let mut chan = instance.fs_channel_mutex.lock().await;
     let exec_result = chan.exec(true, command).await;
-    if exec_result.is_err() {
-        return Err(io::Error::other(exec_result.unwrap_err()));
+    if let Err(err) = exec_result {
+        return Err(io::Error::other(err));
     }
 
     let mut code = None;
