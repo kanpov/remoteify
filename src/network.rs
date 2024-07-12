@@ -8,21 +8,24 @@ pub enum LinuxNetworkError {
     Other(Box<dyn std::error::Error>),
 }
 
+pub enum LinuxNetworkSocket {
+    Tcp { host: String, port: u16 },
+    Unix { socket_path: PathBuf },
+}
+
 #[async_trait]
 pub trait LinuxNetwork {
-    fn is_remote_network(&self) -> bool;
+    fn needs_forwarding(&self) -> bool;
 
-    async fn reverse_forward_tcp(
-        &mut self,
-        remote_host: impl Into<String> + Send,
-        remote_port: u16,
-        local_host: impl Into<String> + Send,
-        local_port: u16,
+    async fn reverse_forward(
+        &self,
+        local_socket: LinuxNetworkSocket,
+        remote_socket: LinuxNetworkSocket,
     ) -> Result<(), LinuxNetworkError>;
 
-    async fn reverse_forward_unix(
-        &mut self,
-        remote_socket_path: impl Into<PathBuf> + Send,
-        local_socket_path: impl Into<PathBuf> + Send,
+    async fn direct_forward(
+        &self,
+        local_socket: LinuxNetworkSocket,
+        remote_socket: LinuxNetworkSocket,
     ) -> Result<(), LinuxNetworkError>;
 }

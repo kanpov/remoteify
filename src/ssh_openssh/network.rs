@@ -1,57 +1,55 @@
-use std::path::PathBuf;
-
 use async_trait::async_trait;
 use openssh::{ForwardType, Socket};
 
-use crate::network::{LinuxNetwork, LinuxNetworkError};
+use crate::network::{LinuxNetwork, LinuxNetworkError, LinuxNetworkSocket};
 
 use super::OpensshLinux;
 
 #[async_trait]
 impl LinuxNetwork for OpensshLinux {
-    fn is_remote_network(&self) -> bool {
+    fn needs_forwarding(&self) -> bool {
         true
     }
 
-    async fn reverse_forward_tcp(
-        &mut self,
-        remote_host: impl Into<String> + Send,
-        remote_port: u16,
-        local_host: impl Into<String> + Send,
-        local_port: u16,
+    async fn reverse_forward(
+        &self,
+        local_socket: LinuxNetworkSocket,
+        remote_socket: LinuxNetworkSocket,
     ) -> Result<(), LinuxNetworkError> {
         self.session
             .request_port_forward(
                 ForwardType::Remote,
-                Socket::TcpSocket {
-                    host: remote_host.into().into(),
-                    port: remote_port,
-                },
-                Socket::TcpSocket {
-                    host: local_host.into().into(),
-                    port: local_port,
-                },
+                conv_socket(remote_socket),
+                conv_socket(local_socket),
             )
             .await
             .map_err(|err| LinuxNetworkError::Other(Box::new(err)))
     }
 
-    async fn reverse_forward_unix(
-        &mut self,
-        remote_socket_path: impl Into<PathBuf> + Send,
-        local_socket_path: impl Into<PathBuf> + Send,
+    async fn direct_forward(
+        &self,
+        local_socket: LinuxNetworkSocket,
+        remote_socket: LinuxNetworkSocket,
     ) -> Result<(), LinuxNetworkError> {
         self.session
             .request_port_forward(
-                ForwardType::Remote,
-                Socket::UnixSocket {
-                    path: remote_socket_path.into().into(),
-                },
-                Socket::UnixSocket {
-                    path: local_socket_path.into().into(),
-                },
+                ForwardType::Local,
+                conv_socket(local_socket),
+                conv_socket(remote_socket),
             )
             .await
             .map_err(|err| LinuxNetworkError::Other(Box::new(err)))
+    }
+}
+
+fn conv_socket<'a>(socket: LinuxNetworkSocket) -> Socket<'a> {
+    match socket {
+        LinuxNetworkSocket::Tcp { host, port } => Socket::TcpSocket {
+            host: host.into(),
+            port,
+        },
+        LinuxNetworkSocket::Unix { socket_path } => Socket::UnixSocket {
+            path: socket_path.into(),
+        },
     }
 }
