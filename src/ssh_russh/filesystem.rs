@@ -192,12 +192,10 @@ where
             .await
             .map_err(io::Error::other)?;
         let entries = read_dir
-            .map(|dir_entry| {
-                LinuxDirEntry::new(
-                    dir_entry.file_name().into(),
-                    dir_entry.file_type().into(),
-                    PathBuf::from(path).join(Path::new(&dir_entry.file_name())).into(),
-                )
+            .map(|dir_entry| LinuxDirEntry {
+                name: dir_entry.file_name().into(),
+                file_type: dir_entry.file_type().into(),
+                path: PathBuf::from(path).join(Path::new(&dir_entry.file_name())).into(),
             })
             .collect::<Vec<_>>();
 
@@ -280,20 +278,20 @@ fn conv_path(path: &OsStr) -> String {
 
 impl Into<LinuxFileMetadata> for FileAttributes {
     fn into(self) -> LinuxFileMetadata {
-        LinuxFileMetadata::new(
-            Some(self.file_type().into()),
-            self.size,
-            match self.permissions {
+        LinuxFileMetadata {
+            file_type: Some(self.file_type().into()),
+            size: self.size,
+            permissions: match self.permissions {
                 Some(bit) => Some(LinuxPermissions::from_bits_retain(bit)),
                 None => None,
             },
-            self.modified().ok(),
-            self.accessed().ok(),
-            None,
-            self.uid,
-            self.user,
-            self.gid,
-            self.group,
-        )
+            modified_time: self.modified().ok(),
+            accessed_time: self.accessed().ok(),
+            created_time: None,
+            user_id: self.uid,
+            user_name: self.user,
+            group_id: self.gid,
+            group_name: self.group,
+        }
     }
 }

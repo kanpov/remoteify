@@ -274,26 +274,26 @@ async fn get_symlink_metadata_should_return_correct_result() {
 }
 
 fn assert_metadata(expected_metadata: Metadata, actual_metadata: LinuxFileMetadata, _file_type: LinuxFileType) {
-    assert!(matches!(actual_metadata.file_type().unwrap(), _file_type));
-    assert_eq!(actual_metadata.size().unwrap(), expected_metadata.size());
+    assert!(matches!(actual_metadata.file_type.unwrap(), _file_type));
+    assert_eq!(actual_metadata.size.unwrap(), expected_metadata.size());
     assert_eq!(
-        actual_metadata.permissions().unwrap(),
+        actual_metadata.permissions.unwrap(),
         LinuxPermissions::from_bits_retain(expected_metadata.permissions().mode())
     );
     assert_eq!(
-        actual_metadata.modified_time().unwrap(),
+        actual_metadata.modified_time.unwrap(),
         expected_metadata.modified().unwrap()
     );
     assert_eq!(
-        actual_metadata.accessed_time().unwrap(),
+        actual_metadata.accessed_time.unwrap(),
         expected_metadata.accessed().unwrap()
     );
     assert_eq!(
-        actual_metadata.created_time().unwrap(),
+        actual_metadata.created_time.unwrap(),
         expected_metadata.created().unwrap()
     );
-    assert_eq!(actual_metadata.user_id().unwrap(), expected_metadata.uid());
-    assert_eq!(actual_metadata.user_name(), None);
-    assert_eq!(actual_metadata.group_id().unwrap(), expected_metadata.gid());
-    assert_eq!(actual_metadata.group_name(), None);
+    assert_eq!(actual_metadata.user_id.unwrap(), expected_metadata.uid());
+    assert_eq!(actual_metadata.user_name, None);
+    assert_eq!(actual_metadata.group_id.unwrap(), expected_metadata.gid());
+    assert_eq!(actual_metadata.group_name, None);
 }

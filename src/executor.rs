@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{collections::HashMap, ffi::OsString};
 
 use async_trait::async_trait;
 
@@ -7,7 +7,7 @@ pub struct LinuxProcessConfiguration {
     pub(crate) program: String,
     pub(crate) args: Vec<String>,
     pub(crate) envs: HashMap<String, String>,
-    pub(crate) working_dir: Option<PathBuf>,
+    pub(crate) working_dir: Option<OsString>,
     pub(crate) redirect_stdout: bool,
     pub(crate) redirect_stdin: bool,
     pub(crate) redirect_stderr: bool,
@@ -59,7 +59,7 @@ impl LinuxProcessConfiguration {
         self
     }
 
-    pub fn working_dir(&mut self, working_dir: impl Into<PathBuf>) -> &mut Self {
+    pub fn working_dir(&mut self, working_dir: impl Into<OsString>) -> &mut Self {
         self.working_dir = Some(working_dir.into());
         self
     }

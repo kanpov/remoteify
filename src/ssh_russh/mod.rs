@@ -24,7 +24,7 @@ where
     sftp_session: Arc<russh_sftp::client::SftpSession>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RusshPtyOptions {
     pub terminal: String,
     pub col_width: u32,

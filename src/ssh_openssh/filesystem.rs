@@ -162,14 +162,15 @@ impl LinuxFilesystem for OpensshLinux {
 
         while let Some(dir_entry_result) = read_dir.next().await {
             let dir_entry = dir_entry_result.map_err(io::Error::other)?;
-            let entry_path = PathBuf::from(path).join(dir_entry.filename()).into_os_string();
-            let entry_type: LinuxFileType = dir_entry
-                .file_type()
-                .ok_or(io::Error::other("file has no type"))?
-                .into();
-            let entry_name = dir_entry.filename().as_os_str().to_os_string();
 
-            entries.push(LinuxDirEntry::new(entry_name, entry_type, entry_path));
+            entries.push(LinuxDirEntry {
+                name: dir_entry.filename().as_os_str().to_os_string(),
+                file_type: dir_entry
+                    .file_type()
+                    .ok_or(io::Error::other("file has no type"))?
+                    .into(),
+                path: PathBuf::from(path).join(dir_entry.filename()).into_os_string(),
+            });
         }
 
         Ok(entries)
@@ -225,18 +226,18 @@ async fn run_fs_command(instance: &OpensshLinux, program: &str, args: Vec<&str>)
 
 impl Into<LinuxFileMetadata> for MetaData {
     fn into(self) -> LinuxFileMetadata {
-        LinuxFileMetadata::new(
-            self.file_type().map(|file_type| file_type.into()),
-            self.len(),
-            self.permissions().map(|perms| perms.into()),
-            self.modified().map(|timestamp| timestamp.as_system_time()),
-            self.accessed().map(|timestamp| timestamp.as_system_time()),
-            None,
-            self.uid(),
-            None,
-            self.gid(),
-            None,
-        )
+        LinuxFileMetadata {
+            file_type: self.file_type().map(|file_type| file_type.into()),
+            size: self.len(),
+            permissions: self.permissions().map(|perms| perms.into()),
+            modified_time: self.modified().map(|timestamp| timestamp.as_system_time()),
+            accessed_time: self.accessed().map(|timestamp| timestamp.as_system_time()),
+            created_time: None,
+            user_id: self.uid(),
+            user_name: None,
+            group_id: self.gid(),
+            group_name: None,
+        }
     }
 }
 

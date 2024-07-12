@@ -20,23 +20,23 @@ pub struct LinuxOpenOptions {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct LinuxDirEntry {
-    name: OsString,
-    file_type: LinuxFileType,
-    path: OsString,
+    pub name: OsString,
+    pub file_type: LinuxFileType,
+    pub path: OsString,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct LinuxFileMetadata {
-    file_type: Option<LinuxFileType>,
-    size: Option<u64>,
-    permissions: Option<LinuxPermissions>,
-    modified_time: Option<SystemTime>,
-    accessed_time: Option<SystemTime>,
-    created_time: Option<SystemTime>,
-    user_id: Option<u32>,
-    user_name: Option<String>,
-    group_id: Option<u32>,
-    group_name: Option<String>,
+    pub file_type: Option<LinuxFileType>,
+    pub size: Option<u64>,
+    pub permissions: Option<LinuxPermissions>,
+    pub modified_time: Option<SystemTime>,
+    pub accessed_time: Option<SystemTime>,
+    pub created_time: Option<SystemTime>,
+    pub user_id: Option<u32>,
+    pub user_name: Option<String>,
+    pub group_id: Option<u32>,
+    pub group_name: Option<String>,
 }
 
 bitflags::bitflags! {
@@ -49,16 +49,18 @@ bitflags::bitflags! {
         const OWNER_READ = 0o400;
         const OWNER_WRITE = 0o200;
         const OWNER_EXECUTE = 0o100;
+
         const GROUP_READ = 0o040;
         const GROUP_WRITE = 0o020;
         const GROUP_EXECUTE = 0o010;
+
         const OTHER_READ = 0o004;
         const OTHER_WRITE = 0o002;
         const OTHER_EXECUTE = 0o001;
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LinuxPermissionsUnknownBitSetError {
     pub mode: u32,
 }
@@ -69,28 +71,6 @@ pub enum LinuxFileType {
     Dir,
     Symlink,
     Other,
-}
-
-impl LinuxDirEntry {
-    pub(crate) fn new(entry_name: OsString, entry_type: LinuxFileType, entry_path: OsString) -> LinuxDirEntry {
-        LinuxDirEntry {
-            name: entry_name,
-            file_type: entry_type,
-            path: entry_path,
-        }
-    }
-
-    pub fn name(&self) -> OsString {
-        self.name.clone()
-    }
-
-    pub fn file_type(&self) -> LinuxFileType {
-        self.file_type
-    }
-
-    pub fn path(&self) -> OsString {
-        self.path.clone()
-    }
 }
 
 impl LinuxOpenOptions {
@@ -147,74 +127,6 @@ impl LinuxOpenOptions {
     pub fn create(&mut self) -> &mut LinuxOpenOptions {
         self.create = true;
         self
-    }
-}
-
-impl LinuxFileMetadata {
-    pub(crate) fn new(
-        file_type: Option<LinuxFileType>,
-        size: Option<u64>,
-        permissions: Option<LinuxPermissions>,
-        modified_time: Option<SystemTime>,
-        accessed_time: Option<SystemTime>,
-        created_time: Option<SystemTime>,
-        user_id: Option<u32>,
-        user_name: Option<String>,
-        group_id: Option<u32>,
-        group_name: Option<String>,
-    ) -> LinuxFileMetadata {
-        LinuxFileMetadata {
-            file_type,
-            size,
-            permissions,
-            modified_time,
-            accessed_time,
-            created_time,
-            user_id,
-            user_name,
-            group_id,
-            group_name,
-        }
-    }
-
-    pub fn file_type(&self) -> Option<LinuxFileType> {
-        self.file_type
-    }
-
-    pub fn size(&self) -> Option<u64> {
-        self.size
-    }
-
-    pub fn permissions(&self) -> Option<LinuxPermissions> {
-        self.permissions
-    }
-
-    pub fn modified_time(&self) -> Option<SystemTime> {
-        self.modified_time
-    }
-
-    pub fn accessed_time(&self) -> Option<SystemTime> {
-        self.accessed_time
-    }
-
-    pub fn created_time(&self) -> Option<SystemTime> {
-        self.created_time
-    }
-
-    pub fn user_id(&self) -> Option<u32> {
-        self.user_id
-    }
-
-    pub fn user_name(&self) -> Option<String> {
-        self.user_name.clone()
-    }
-
-    pub fn group_id(&self) -> Option<u32> {
-        self.group_id
-    }
-
-    pub fn group_name(&self) -> Option<String> {
-        self.group_name.clone()
     }
 }
 

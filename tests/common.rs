@@ -231,12 +231,9 @@ async fn get_ssh_port() -> u16 {
 
 #[allow(unused)]
 pub fn entries_contain(entries: &Vec<LinuxDirEntry>, expected_type: LinuxFileType, expected_path: &OsStr) {
-    dbg!(entries);
-    dbg!(expected_path);
-    dbg!(expected_type);
     assert!(entries
         .iter()
-        .any(|entry| { matches!(entry.file_type(), expected_type) && entry.path().as_os_str() == expected_path }))
+        .any(|entry| { matches!(entry.file_type, expected_type) && entry.path.as_os_str() == expected_path }))
 }
 
 #[derive(Debug)]

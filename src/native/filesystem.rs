@@ -99,17 +99,15 @@ impl LinuxFilesystem for NativeLinux {
 
             match entry {
                 Some(entry_value) => {
-                    let entry_name = entry_value.file_name();
-
-                    let file_type = entry_value
-                        .file_type()
-                        .await
-                        .map(|entry_type| entry_type.into())
-                        .map_err(io::Error::other)?;
-
-                    let entry_path = entry_value.path().into_os_string();
-
-                    entries.push(LinuxDirEntry::new(entry_name, file_type, entry_path));
+                    entries.push(LinuxDirEntry {
+                        name: entry_value.file_name(),
+                        file_type: entry_value
+                            .file_type()
+                            .await
+                            .map(|entry_type| entry_type.into())
+                            .map_err(io::Error::other)?,
+                        path: entry_value.path().into_os_string(),
+                    });
                 }
                 None => {
                     break;
@@ -157,17 +155,17 @@ impl Into<LinuxFileType> for FileType {
 
 impl Into<LinuxFileMetadata> for Metadata {
     fn into(self) -> LinuxFileMetadata {
-        LinuxFileMetadata::new(
-            Some(self.file_type().into()),
-            Some(self.size()),
-            Some(LinuxPermissions::from_bits_retain(self.permissions().mode())),
-            self.modified().ok(),
-            self.accessed().ok(),
-            self.created().ok(),
-            Some(self.uid()),
-            None,
-            Some(self.gid()),
-            None,
-        )
+        LinuxFileMetadata {
+            file_type: Some(self.file_type().into()),
+            size: Some(self.size()),
+            permissions: Some(LinuxPermissions::from_bits_retain(self.permissions().mode())),
+            modified_time: self.modified().ok(),
+            accessed_time: self.accessed().ok(),
+            created_time: self.created().ok(),
+            user_id: Some(self.uid()),
+            user_name: None,
+            group_id: Some(self.gid()),
+            group_name: None,
+        }
     }
 }
