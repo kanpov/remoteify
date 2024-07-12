@@ -9,7 +9,7 @@ use std::{
 use async_trait::async_trait;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct LinuxOpenOptions {
     read: bool,
     write: bool,
@@ -18,14 +18,14 @@ pub struct LinuxOpenOptions {
     create: bool,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct LinuxDirEntry {
     name: String,
     file_type: LinuxFileType,
     path: PathBuf,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct LinuxFileMetadata {
     file_type: Option<LinuxFileType>,
     size: Option<u64>,
@@ -58,12 +58,12 @@ bitflags::bitflags! {
     }
 }
 
-pub enum LinuxPermissionsError {
-    CouldNotExtractMode,
-    UnknownBitSet,
+#[derive(Clone, Copy, Debug)]
+pub struct LinuxPermissionsUnknownBitSetError {
+    pub mode: u32,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum LinuxFileType {
     File,
     Dir,
@@ -90,18 +90,6 @@ impl LinuxDirEntry {
 
     pub fn path(&self) -> PathBuf {
         self.path.clone()
-    }
-}
-
-impl Default for LinuxOpenOptions {
-    fn default() -> Self {
-        Self {
-            read: false,
-            write: false,
-            append: false,
-            truncate: false,
-            create: false,
-        }
     }
 }
 
@@ -198,7 +186,7 @@ impl LinuxFileMetadata {
     }
 
     pub fn permissions(&self) -> Option<LinuxPermissions> {
-        self.permissions.clone()
+        self.permissions
     }
 
     pub fn modified_time(&self) -> Option<SystemTime> {
@@ -231,20 +219,17 @@ impl LinuxFileMetadata {
 }
 
 impl TryFrom<Permissions> for LinuxPermissions {
-    type Error = LinuxPermissionsError;
+    type Error = LinuxPermissionsUnknownBitSetError;
 
     fn try_from(value: Permissions) -> Result<Self, Self::Error> {
-        let mode = value
-            .mode()
-            .try_into()
-            .map_err(|_| LinuxPermissionsError::CouldNotExtractMode)?;
-        LinuxPermissions::from_bits(mode).ok_or(LinuxPermissionsError::UnknownBitSet)
+        let mode = value.mode();
+        LinuxPermissions::from_bits(mode).ok_or(LinuxPermissionsUnknownBitSetError { mode })
     }
 }
 
-impl Into<Permissions> for LinuxPermissions {
-    fn into(self) -> Permissions {
-        Permissions::from_mode(self.bits())
+impl From<LinuxPermissions> for Permissions {
+    fn from(value: LinuxPermissions) -> Self {
+        Permissions::from_mode(value.bits())
     }
 }
 

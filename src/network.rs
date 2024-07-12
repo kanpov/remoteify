@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use async_trait::async_trait;
 
+#[derive(Debug)]
 pub enum LinuxNetworkError {
     UnsupportedOperation,
     Other(Box<dyn std::error::Error>),

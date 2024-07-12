@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use async_trait::async_trait;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinuxProcessConfiguration {
     pub(crate) program: String,
     pub(crate) args: Vec<String>,
@@ -111,7 +111,7 @@ pub enum LinuxProcessError {
     Other(Box<dyn std::error::Error>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinuxProcessOutput {
     pub stdout: Option<Vec<u8>>,
     pub stderr: Option<Vec<u8>>,
@@ -119,7 +119,7 @@ pub struct LinuxProcessOutput {
     pub status_code: Option<i64>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinuxProcessPartialOutput {
     pub stdout: Option<Vec<u8>>,
     pub stderr: Option<Vec<u8>>,
