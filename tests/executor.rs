@@ -4,23 +4,25 @@ use remoteify::{
     executor::{LinuxExecutor, LinuxProcessConfiguration},
     native::NativeLinux,
 };
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 mod common;
+
+static SEQUENTIALITY_MUTEX: Mutex<()> = Mutex::const_new(());
 
 #[tokio::test]
 async fn execution_with_only_stdout() {
     executor_test(|executor| {
         async move {
-            let mut config = LinuxProcessConfiguration::new("/usr/bin/dd");
+            let mut config = LinuxProcessConfiguration::new("/usr/bin/echo");
             config.arg("--help").redirect_stdout();
             let process_output = executor.execute(&config).await.expect("Execution failed");
             let stdout = String::from_utf8(process_output.stdout.expect("No stdout provided")).unwrap();
 
             assert_eq!(process_output.status_code.expect("No status code provided"), 0);
             assert_eq!(process_output.stderr, None);
-            assert!(stdout.contains("Copy a file, converting and formatting according to the operands."));
-            assert!(stdout.contains("GNU coreutils online help: <https://www.gnu.org/software/coreutils/>"));
+            assert!(stdout.contains("Full documentation <https://www.gnu.org/software/coreutils/echo>"));
         }
         .boxed()
     })
@@ -51,9 +53,13 @@ where
     F: FnOnce(Box<dyn LinuxExecutor + Send + '_>) -> BoxFuture<()>,
     F: Copy,
 {
+    let guard = SEQUENTIALITY_MUTEX.lock().await;
+
     let native = NativeLinux {};
     function(Box::new(native)).await;
 
     let russh_data = RusshData::setup().await;
     function(Box::new(russh_data.implementation)).await;
+
+    drop(guard);
 }

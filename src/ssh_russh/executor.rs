@@ -70,7 +70,8 @@ impl<'a> LinuxProcess for RusshLinuxProcess<'a> {
 
     async fn await_exit(&mut self) -> Result<Option<i64>, LinuxProcessError> {
         let mut channel = self.channel_mutex.lock().await;
-        Ok(await_process_exit(&mut channel).await)
+        let status = await_process_exit(&mut channel).await;
+        Ok(status)
     }
 
     async fn await_exit_with_output(mut self: Box<Self>) -> Result<LinuxProcessOutput, LinuxProcessError> {
@@ -86,6 +87,12 @@ impl<'a> LinuxProcess for RusshLinuxProcess<'a> {
             .await
             .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
         Ok(())
+    }
+}
+
+impl Drop for RusshLinuxProcess<'_> {
+    fn drop(&mut self) {
+        cleanup_buffers(&self.channel_id);
     }
 }
 
@@ -183,9 +190,7 @@ async fn await_process_exit(channel: &mut Channel<Msg>) -> Option<i64> {
     status_code
 }
 
-fn fetch_process_output(channel_id: &ChannelId, status_code: Option<i64>) -> LinuxProcessOutput {
-    let partial_output = fetch_partial_process_output(channel_id);
-
+fn cleanup_buffers(channel_id: &ChannelId) {
     STDOUT_BUFFERS
         .write()
         .expect("Stdout rwlock was poisoned!")
@@ -194,6 +199,11 @@ fn fetch_process_output(channel_id: &ChannelId, status_code: Option<i64>) -> Lin
         .write()
         .expect("Stderr rwlock was poisoned!")
         .remove(channel_id);
+}
+
+fn fetch_process_output(channel_id: &ChannelId, status_code: Option<i64>) -> LinuxProcessOutput {
+    let partial_output = fetch_partial_process_output(channel_id);
+    cleanup_buffers(channel_id);
 
     LinuxProcessOutput {
         stdout: partial_output.stdout,

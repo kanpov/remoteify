@@ -77,6 +77,7 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
 
     async fn await_exit_with_output(mut self: Box<Self>) -> Result<LinuxProcessOutput, LinuxProcessError> {
         let os_output = self.child.wait_with_output().await.map_err(LinuxProcessError::IO)?;
+        cleanup_buffers(self.pid);
         Ok(get_process_output(
             os_output,
             self.redirect_stdout,
@@ -85,15 +86,19 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
     }
 
     async fn begin_kill(&mut self) -> Result<(), LinuxProcessError> {
+        cleanup_buffers(self.pid);
         self.child.start_kill().map_err(LinuxProcessError::IO)
     }
 
     async fn await_exit(&mut self) -> Result<Option<i64>, LinuxProcessError> {
-        self.child
+        let status = self
+            .child
             .wait()
             .await
             .map(|status| status.code().map(|i| i.into()))
-            .map_err(LinuxProcessError::IO)
+            .map_err(LinuxProcessError::IO)?;
+        cleanup_buffers(self.pid);
+        Ok(status)
     }
 }
 
@@ -148,6 +153,20 @@ impl LinuxExecutor for NativeLinux {
             process_configuration.redirect_stdout,
             process_configuration.redirect_stderr,
         ))
+    }
+}
+
+fn cleanup_buffers(pid: Option<u32>) {
+    if let Some(pid) = pid {
+        STDOUT_BUFFERS
+            .write()
+            .expect("Stdout rwlock was poisoned!")
+            .remove(&pid);
+
+        STDERR_BUFFERS
+            .write()
+            .expect("Stderr rwlock was poisoned!")
+            .remove(&pid);
     }
 }
 
