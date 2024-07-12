@@ -73,7 +73,7 @@ impl<'a> LinuxProcess for RusshLinuxProcess<'a> {
         Ok(await_process_exit(&mut channel).await)
     }
 
-    async fn await_exit_with_output(mut self) -> Result<LinuxProcessOutput, LinuxProcessError> {
+    async fn await_exit_with_output(mut self: Box<Self>) -> Result<LinuxProcessOutput, LinuxProcessError> {
         let mut channel = self.channel_mutex.lock().await;
         let status_code = await_process_exit(&mut channel).await;
         Ok(fetch_process_output(&self.channel_id, status_code))

@@ -75,7 +75,7 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
         })
     }
 
-    async fn await_exit_with_output(mut self) -> Result<LinuxProcessOutput, LinuxProcessError> {
+    async fn await_exit_with_output(mut self: Box<Self>) -> Result<LinuxProcessOutput, LinuxProcessError> {
         let os_output = self.child.wait_with_output().await.map_err(LinuxProcessError::IO)?;
         Ok(get_process_output(
             os_output,

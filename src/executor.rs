@@ -138,13 +138,18 @@ pub trait LinuxProcess {
 
     async fn await_exit(&mut self) -> Result<Option<i64>, LinuxProcessError>;
 
-    async fn await_exit_with_output(mut self) -> Result<LinuxProcessOutput, LinuxProcessError>;
+    async fn await_exit_with_output(mut self: Box<Self>) -> Result<LinuxProcessOutput, LinuxProcessError>;
 
     async fn begin_kill(&mut self) -> Result<(), LinuxProcessError>;
 
     async fn kill(&mut self) -> Result<Option<i64>, LinuxProcessError> {
         self.begin_kill().await?;
         self.await_exit().await
+    }
+
+    async fn kill_with_output(mut self: Box<Self>) -> Result<LinuxProcessOutput, LinuxProcessError> {
+        self.begin_kill().await?;
+        self.await_exit_with_output().await
     }
 }
 
