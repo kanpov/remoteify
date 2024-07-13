@@ -53,18 +53,18 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
 
     fn get_partial_output(&self) -> Result<LinuxProcessPartialOutput, LinuxProcessError> {
         let pid = self.pid.ok_or(LinuxProcessError::ProcessIdNotFound)?;
-        let mut stdout: Option<Vec<u8>> = None;
-        let mut stderr: Option<Vec<u8>> = None;
+        let mut stdout: Vec<u8> = Vec::new();
+        let mut stderr: Vec<u8> = Vec::new();
 
         if self.redirect_stdout {
             if let Some(buf) = STDOUT_BUFFERS.read().expect("Stdout rwlock was poisoned!").get(&pid) {
-                stdout = Some(buf.to_vec());
+                stdout = buf.to_vec();
             }
         }
 
         if self.redirect_stderr {
             if let Some(buf) = STDERR_BUFFERS.read().expect("Stderr rwlock was poisoned!").get(&pid) {
-                stderr = Some(buf.to_vec());
+                stderr = buf.to_vec();
             }
         }
 
@@ -78,15 +78,10 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
     async fn await_exit_with_output(mut self: Box<Self>) -> Result<LinuxProcessOutput, LinuxProcessError> {
         let os_output = self.child.wait_with_output().await.map_err(LinuxProcessError::IO)?;
         cleanup_buffers(self.pid);
-        Ok(get_process_output(
-            os_output,
-            self.redirect_stdout,
-            self.redirect_stderr,
-        ))
+        Ok(get_process_output(os_output))
     }
 
     async fn begin_kill(&mut self) -> Result<(), LinuxProcessError> {
-        cleanup_buffers(self.pid);
         self.child.start_kill().map_err(LinuxProcessError::IO)
     }
 
@@ -148,11 +143,7 @@ impl LinuxExecutor for NativeLinux {
     ) -> Result<LinuxProcessOutput, LinuxProcessError> {
         let mut command = create_command_from_config(process_configuration);
         let os_output = command.output().await.map_err(LinuxProcessError::IO)?;
-        Ok(get_process_output(
-            os_output,
-            process_configuration.redirect_stdout,
-            process_configuration.redirect_stderr,
-        ))
+        Ok(get_process_output(os_output))
     }
 }
 
@@ -170,20 +161,10 @@ fn cleanup_buffers(pid: Option<u32>) {
     }
 }
 
-fn get_process_output(os_output: Output, redirect_stdout: bool, redirect_stderr: bool) -> LinuxProcessOutput {
-    let stdout = match redirect_stdout {
-        true => Some(os_output.stdout),
-        false => None,
-    };
-
-    let stderr = match redirect_stderr {
-        true => Some(os_output.stderr),
-        false => None,
-    };
-
+fn get_process_output(os_output: Output) -> LinuxProcessOutput {
     LinuxProcessOutput {
-        stdout,
-        stderr,
+        stdout: os_output.stdout,
+        stderr: os_output.stderr,
         stdout_extended: HashMap::new(),
         status_code: os_output.status.code().map(|i| i.into()),
     }
@@ -230,8 +211,6 @@ fn queue_capturer(child: &mut Child, is_stderr: bool) {
                 None => break,
             };
         }
-
-        ()
     });
 }
 

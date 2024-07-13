@@ -113,21 +113,21 @@ pub enum LinuxProcessError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinuxProcessOutput {
-    pub stdout: Option<Vec<u8>>,
-    pub stderr: Option<Vec<u8>>,
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
     pub stdout_extended: HashMap<u32, Vec<u8>>,
     pub status_code: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinuxProcessPartialOutput {
-    pub stdout: Option<Vec<u8>>,
-    pub stderr: Option<Vec<u8>>,
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
     pub stdout_extended: HashMap<u32, Vec<u8>>,
 }
 
 #[async_trait]
-pub trait LinuxProcess {
+pub trait LinuxProcess: Send {
     fn id(&self) -> Option<u32>;
 
     async fn write_to_stdin(&mut self, data: &[u8]) -> Result<usize, LinuxProcessError>;

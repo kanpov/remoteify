@@ -12,16 +12,16 @@ mod common;
 static SEQUENTIALITY_MUTEX: Mutex<()> = Mutex::const_new(());
 
 #[tokio::test]
-async fn execution_with_only_stdout() {
+async fn simple_command_outputting() {
     executor_test(|executor| {
         async move {
             let mut config = LinuxProcessConfiguration::new("/usr/bin/echo");
             config.arg("--help").redirect_stdout();
             let process_output = executor.execute(&config).await.expect("Execution failed");
-            let stdout = String::from_utf8(process_output.stdout.expect("No stdout provided")).unwrap();
+            let stdout = String::from_utf8(process_output.stdout).unwrap();
 
             assert_eq!(process_output.status_code.expect("No status code provided"), 0);
-            assert_eq!(process_output.stderr, None);
+            assert!(process_output.stderr.is_empty());
             assert!(stdout.contains("Full documentation <https://www.gnu.org/software/coreutils/echo>"));
         }
         .boxed()
@@ -30,7 +30,7 @@ async fn execution_with_only_stdout() {
 }
 
 #[tokio::test]
-async fn execution_with_only_stderr() {
+async fn simple_command_erroring() {
     executor_test(|executor| {
         async move {
             let mut config = LinuxProcessConfiguration::new("/usr/bin/cat");
@@ -38,10 +38,51 @@ async fn execution_with_only_stderr() {
             config.arg(format!("/tmp/{}", id));
             config.redirect_stderr();
             let process_output = executor.execute(&config).await.expect("Execution failed");
-            let stderr = String::from_utf8(process_output.stderr.expect("No stderr provided")).unwrap();
+            let stderr = String::from_utf8(process_output.stderr).unwrap();
 
             assert_ne!(process_output.status_code.expect("No status code provided"), 0);
             assert!(stderr.contains(id.to_string().as_str()));
+        }
+        .boxed()
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn interactive_command_with_immediate_eof_returning_only_status() {
+    executor_test(|executor| {
+        async move {
+            let mut config = LinuxProcessConfiguration::new("/usr/bin/bash");
+            config.redirect_stdin();
+            let mut process = executor.begin_execute(&config).await.expect("Spawn failed");
+            process
+                .write_to_stdin(b"echo \"test\" ; exit")
+                .await
+                .expect("Write failed");
+            process.close_stdin().await.expect("EOF failed");
+            let status_code = process.await_exit().await.expect("Awaiting failed");
+            assert_eq!(status_code, Some(0));
+        }
+        .boxed()
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn interactive_command_with_no_eof_returning_stdout() {
+    executor_test(|executor| {
+        async move {
+            let mut config = LinuxProcessConfiguration::new("/usr/bin/bash");
+            config.redirect_stdout();
+            config.redirect_stdin();
+            let mut process = executor.begin_execute(&config).await.unwrap();
+            process.write_to_stdin(b"echo \"test\" ; exit").await.unwrap();
+            process.close_stdin().await.unwrap();
+            let status_code = process.await_exit().await.unwrap();
+            assert_eq!(status_code, Some(0));
+            let process_output = process.get_partial_output().unwrap();
+            assert_eq!(String::from_utf8(process_output.stdout).unwrap(), "test");
+            assert!(process_output.stderr.is_empty());
         }
         .boxed()
     })
@@ -55,9 +96,11 @@ where
 {
     let guard = SEQUENTIALITY_MUTEX.lock().await;
 
+    dbg!("RUNNING FOR NATIVE");
     let native = NativeLinux {};
     function(Box::new(native)).await;
 
+    dbg!("RUNNING FOR RUSSH");
     let russh_data = RusshData::setup().await;
     function(Box::new(russh_data.implementation)).await;
 

@@ -219,8 +219,8 @@ fn fetch_partial_process_output(channel_id: &ChannelId) -> LinuxProcessPartialOu
         .expect("Stdout rwlock was poisoned!")
         .get(&channel_id)
     {
-        Some(buf) => Some(buf.to_vec()),
-        None => None,
+        Some(buf) => buf.to_vec(),
+        None => Vec::new(),
     };
 
     let stderr = match STDERR_BUFFERS
@@ -228,8 +228,8 @@ fn fetch_partial_process_output(channel_id: &ChannelId) -> LinuxProcessPartialOu
         .expect("Stderr rwlock was poisoned!")
         .get(&channel_id)
     {
-        Some(buf) => Some(buf.to_vec()),
-        None => None,
+        Some(buf) => buf.to_vec(),
+        None => Vec::new(),
     };
 
     let stdout_extended = STDEXT_BUFFERS
