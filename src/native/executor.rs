@@ -206,7 +206,10 @@ fn queue_capturer(child: &mut Child, is_stderr: bool) {
                 Err(_) => break,
             };
 
-            let mut write_ref = STDOUT_BUFFERS.write().expect("Stdout rwlock was poisoned!");
+            let mut write_ref = match is_stderr {
+                true => STDERR_BUFFERS.write().expect("Stderr rwlock was poisoned!"),
+                false => STDOUT_BUFFERS.write().expect("Stdout rwlock was poisoned!"),
+            };
             match write_ref.get_mut(&pid) {
                 Some(buf) => {
                     buf.extend(line.as_bytes());

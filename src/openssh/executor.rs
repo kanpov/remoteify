@@ -3,13 +3,15 @@ use std::{
     process::Output,
     sync::{
         atomic::{AtomicU32, Ordering},
-        Arc,
+        Arc, RwLock,
     },
 };
 
 use async_trait::async_trait;
+use bytes::BytesMut;
+use once_cell::sync::Lazy;
 use openssh::{Child, ChildStdin, OwningCommand, Session, Stdio};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 use crate::executor::{
     FinishedLinuxProcessOutput, LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError,
@@ -19,6 +21,8 @@ use crate::executor::{
 use super::OpensshLinux;
 
 static SYNTHETIC_ID_GENERATOR: AtomicU32 = AtomicU32::new(0);
+static STDOUT_BUFFERS: Lazy<Arc<RwLock<HashMap<u32, BytesMut>>>> = Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+static STDERR_BUFFERS: Lazy<Arc<RwLock<HashMap<u32, BytesMut>>>> = Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
 
 struct OpensshLinuxProcess {
     child: Child<Arc<Session>>,
@@ -51,7 +55,7 @@ impl LinuxProcess for OpensshLinuxProcess {
     }
 
     fn get_current_output(&self) -> Result<LinuxProcessOutput, LinuxProcessError> {
-        todo!()
+        Ok(get_current_output_internal(self.synthetic_id))
     }
 
     async fn await_exit(self: Box<Self>) -> Result<Option<i64>, LinuxProcessError> {
@@ -63,7 +67,15 @@ impl LinuxProcess for OpensshLinuxProcess {
     }
 
     async fn await_exit_with_output(self: Box<Self>) -> Result<FinishedLinuxProcessOutput, LinuxProcessError> {
-        todo!()
+        let status_code: Option<i64> = self
+            .child
+            .wait()
+            .await
+            .map_err(|err| LinuxProcessError::Other(Box::new(err)))?
+            .code()
+            .map(|i| i.into());
+        let output = get_current_output_internal(self.synthetic_id);
+        Ok(FinishedLinuxProcessOutput::join(output, status_code))
     }
 
     async fn begin_kill(&mut self) -> Result<(), LinuxProcessError> {
@@ -84,6 +96,14 @@ impl LinuxExecutor for OpensshLinux {
             .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
         let synthetic_id = SYNTHETIC_ID_GENERATOR.fetch_add(1, Ordering::Relaxed);
         let stdin = child.stdin().take();
+
+        if process_configuration.redirect_stdout {
+            spawn_capture_task(synthetic_id, CapturerType::Stdout, &mut child);
+        }
+
+        if process_configuration.redirect_stderr {
+            spawn_capture_task(synthetic_id, CapturerType::Stderr, &mut child);
+        }
 
         Ok(Box::new(OpensshLinuxProcess {
             child,
@@ -124,6 +144,33 @@ impl ArcShellExt for Session {
         let mut cmd = self.arc_command("sh");
         cmd.arg("-c").arg(command.as_ref());
         cmd
+    }
+}
+
+fn get_current_output_internal(synthetic_id: u32) -> LinuxProcessOutput {
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+
+    if let Some(buf) = STDOUT_BUFFERS
+        .read()
+        .expect("Stdout rwlock was poisoned!")
+        .get(&synthetic_id)
+    {
+        stdout = buf.to_vec();
+    }
+
+    if let Some(buf) = STDERR_BUFFERS
+        .read()
+        .expect("Stderr rwlock was poisoned!")
+        .get(&synthetic_id)
+    {
+        stderr = buf.to_vec();
+    }
+
+    LinuxProcessOutput {
+        stdout,
+        stderr,
+        stdout_extended: HashMap::new(),
     }
 }
 
@@ -184,4 +231,53 @@ fn create_owning_command(
         apply_pipes(&mut owning_command);
         owning_command
     }
+}
+
+enum CapturerType {
+    Stdout,
+    Stderr,
+}
+
+fn spawn_capture_task(synthetic_id: u32, capturer_type: CapturerType, child: &mut Child<Arc<Session>>) {
+    let mut stdout_reader = None;
+    let mut stderr_reader = None;
+
+    match capturer_type {
+        CapturerType::Stdout => {
+            STDOUT_BUFFERS
+                .write()
+                .expect("Stdout rwlock was poisoned!")
+                .insert(synthetic_id, BytesMut::new());
+            stdout_reader = Some(BufReader::new(child.stdout().take().unwrap()).lines());
+        }
+        CapturerType::Stderr => {
+            STDERR_BUFFERS
+                .write()
+                .expect("Stderr rwlock was poisoned!")
+                .insert(synthetic_id, BytesMut::new());
+            stderr_reader = Some(BufReader::new(child.stderr().take().unwrap()).lines());
+        }
+    }
+
+    tokio::spawn(async move {
+        loop {
+            let line = match match capturer_type {
+                CapturerType::Stdout => stdout_reader.as_mut().unwrap().next_line().await,
+                CapturerType::Stderr => stderr_reader.as_mut().unwrap().next_line().await,
+            } {
+                Ok(Some(line)) => line + "\n",
+                Ok(None) => break,
+                Err(_) => break,
+            };
+
+            let mut write_ref = match capturer_type {
+                CapturerType::Stdout => STDOUT_BUFFERS.write().expect("Stdout rwlock was poisoned!"),
+                CapturerType::Stderr => STDERR_BUFFERS.write().expect("Stderr rwlock was poisoned!"),
+            };
+            match write_ref.get_mut(&synthetic_id) {
+                Some(buf_ref) => buf_ref.extend(line.as_bytes()),
+                None => break,
+            }
+        }
+    });
 }

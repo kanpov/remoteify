@@ -76,8 +76,7 @@ async fn interactive_command_with_no_eof_returning_stdout() {
             config.redirect_stdout();
             config.redirect_stdin();
             let mut process = executor.begin_execute(&config).await.unwrap();
-            process.write_to_stdin(b"echo \"test\" ; exit").await.unwrap();
-            process.close_stdin().await.unwrap();
+            process.write_to_stdin(b"echo \"test\" ; exit\n").await.unwrap();
             let process_output = process.await_exit_with_output().await.unwrap();
             assert_eq!(process_output.status_code, Some(0));
             assert_eq!(String::from_utf8(process_output.stdout).unwrap(), "test\n");
