@@ -93,16 +93,13 @@ where
     F: FnOnce(Box<dyn LinuxExecutor + Send + '_>) -> BoxFuture<()>,
     F: Copy,
 {
-    let guard = SEQUENTIALITY_MUTEX.lock().await;
-
     let native = NativeLinux {};
-    function(Box::new(native)).await;
-
     let russh_data = RusshData::setup().await;
-    function(Box::new(russh_data.implementation)).await;
-
     let openssh_data = OpensshData::setup().await;
-    function(Box::new(openssh_data.implementation)).await;
 
+    let guard = SEQUENTIALITY_MUTEX.lock().await;
+    function(Box::new(native)).await;
+    function(Box::new(russh_data.implementation)).await;
+    function(Box::new(openssh_data.implementation)).await;
     drop(guard);
 }
