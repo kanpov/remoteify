@@ -112,7 +112,7 @@ pub enum LinuxProcessError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LinuxProcessOutput {
+pub struct FinishedLinuxProcessOutput {
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
     pub stdout_extended: HashMap<u32, Vec<u8>>,
@@ -120,10 +120,21 @@ pub struct LinuxProcessOutput {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LinuxProcessPartialOutput {
+pub struct LinuxProcessOutput {
     pub stdout: Vec<u8>,
     pub stderr: Vec<u8>,
     pub stdout_extended: HashMap<u32, Vec<u8>>,
+}
+
+impl FinishedLinuxProcessOutput {
+    pub fn join(output: LinuxProcessOutput, status_code: Option<i64>) -> FinishedLinuxProcessOutput {
+        FinishedLinuxProcessOutput {
+            stdout: output.stdout,
+            stderr: output.stderr,
+            stdout_extended: output.stdout_extended,
+            status_code,
+        }
+    }
 }
 
 #[async_trait]
@@ -134,11 +145,15 @@ pub trait LinuxProcess: Send {
 
     async fn close_stdin(&mut self) -> Result<(), LinuxProcessError>;
 
-    fn get_partial_output(&self) -> Result<LinuxProcessPartialOutput, LinuxProcessError>;
+    fn get_current_output(&self) -> Result<LinuxProcessOutput, LinuxProcessError>;
 
     async fn await_exit(&mut self) -> Result<Option<i64>, LinuxProcessError>;
 
-    async fn await_exit_with_output(mut self: Box<Self>) -> Result<LinuxProcessOutput, LinuxProcessError>;
+    async fn await_exit_with_output(mut self: Box<Self>) -> Result<FinishedLinuxProcessOutput, LinuxProcessError> {
+        let status_code = self.await_exit().await?;
+        let output = self.get_current_output()?;
+        Ok(FinishedLinuxProcessOutput::join(output, status_code))
+    }
 
     async fn begin_kill(&mut self) -> Result<(), LinuxProcessError>;
 
@@ -147,7 +162,7 @@ pub trait LinuxProcess: Send {
         self.await_exit().await
     }
 
-    async fn kill_with_output(mut self: Box<Self>) -> Result<LinuxProcessOutput, LinuxProcessError> {
+    async fn kill_with_output(mut self: Box<Self>) -> Result<FinishedLinuxProcessOutput, LinuxProcessError> {
         self.begin_kill().await?;
         self.await_exit_with_output().await
     }
@@ -163,5 +178,5 @@ pub trait LinuxExecutor {
     async fn execute(
         &self,
         process_configuration: &LinuxProcessConfiguration,
-    ) -> Result<LinuxProcessOutput, LinuxProcessError>;
+    ) -> Result<FinishedLinuxProcessOutput, LinuxProcessError>;
 }

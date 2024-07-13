@@ -13,8 +13,8 @@ use tokio::{
 };
 
 use crate::executor::{
-    LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError, LinuxProcessOutput,
-    LinuxProcessPartialOutput,
+    FinishedLinuxProcessOutput, LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError,
+    LinuxProcessOutput,
 };
 
 use super::NativeLinux;
@@ -51,7 +51,7 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
         }
     }
 
-    fn get_partial_output(&self) -> Result<LinuxProcessPartialOutput, LinuxProcessError> {
+    fn get_current_output(&self) -> Result<LinuxProcessOutput, LinuxProcessError> {
         let pid = self.pid.ok_or(LinuxProcessError::ProcessIdNotFound)?;
         let mut stdout: Vec<u8> = Vec::new();
         let mut stderr: Vec<u8> = Vec::new();
@@ -68,17 +68,11 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
             }
         }
 
-        Ok(LinuxProcessPartialOutput {
+        Ok(LinuxProcessOutput {
             stdout,
             stderr,
             stdout_extended: HashMap::new(),
         })
-    }
-
-    async fn await_exit_with_output(mut self: Box<Self>) -> Result<LinuxProcessOutput, LinuxProcessError> {
-        let os_output = self.child.wait_with_output().await.map_err(LinuxProcessError::IO)?;
-        cleanup_buffers(self.pid);
-        Ok(get_process_output(os_output))
     }
 
     async fn begin_kill(&mut self) -> Result<(), LinuxProcessError> {
@@ -92,8 +86,34 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
             .await
             .map(|status| status.code().map(|i| i.into()))
             .map_err(LinuxProcessError::IO)?;
-        cleanup_buffers(self.pid);
         Ok(status)
+    }
+}
+
+impl Drop for NativeLinuxProcess {
+    fn drop(&mut self) {
+        if let Some(pid) = self.pid {
+            STDOUT_BUFFERS
+                .write()
+                .expect("Stdout rwlock was poisoned!")
+                .remove(&pid);
+
+            STDERR_BUFFERS
+                .write()
+                .expect("Stderr rwlock was poisoned!")
+                .remove(&pid);
+        }
+    }
+}
+
+impl From<Output> for FinishedLinuxProcessOutput {
+    fn from(value: Output) -> Self {
+        FinishedLinuxProcessOutput {
+            stdout: value.stdout,
+            stderr: value.stderr,
+            stdout_extended: HashMap::new(),
+            status_code: value.status.code().map(|i| i.into()),
+        }
     }
 }
 
@@ -140,33 +160,10 @@ impl LinuxExecutor for NativeLinux {
     async fn execute(
         &self,
         process_configuration: &LinuxProcessConfiguration,
-    ) -> Result<LinuxProcessOutput, LinuxProcessError> {
+    ) -> Result<FinishedLinuxProcessOutput, LinuxProcessError> {
         let mut command = create_command_from_config(process_configuration);
         let os_output = command.output().await.map_err(LinuxProcessError::IO)?;
-        Ok(get_process_output(os_output))
-    }
-}
-
-fn cleanup_buffers(pid: Option<u32>) {
-    if let Some(pid) = pid {
-        STDOUT_BUFFERS
-            .write()
-            .expect("Stdout rwlock was poisoned!")
-            .remove(&pid);
-
-        STDERR_BUFFERS
-            .write()
-            .expect("Stderr rwlock was poisoned!")
-            .remove(&pid);
-    }
-}
-
-fn get_process_output(os_output: Output) -> LinuxProcessOutput {
-    LinuxProcessOutput {
-        stdout: os_output.stdout,
-        stderr: os_output.stderr,
-        stdout_extended: HashMap::new(),
-        status_code: os_output.status.code().map(|i| i.into()),
+        Ok(os_output.into())
     }
 }
 

@@ -17,8 +17,8 @@ use tokio::{
 };
 
 use crate::executor::{
-    LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError, LinuxProcessOutput,
-    LinuxProcessPartialOutput,
+    FinishedLinuxProcessOutput, LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError,
+    LinuxProcessOutput,
 };
 
 use super::RusshLinux;
@@ -64,20 +64,14 @@ impl<'a> LinuxProcess for RusshLinuxProcess<'a> {
         Ok(())
     }
 
-    fn get_partial_output(&self) -> Result<LinuxProcessPartialOutput, LinuxProcessError> {
-        Ok(fetch_partial_process_output(&self.channel_id))
+    fn get_current_output(&self) -> Result<LinuxProcessOutput, LinuxProcessError> {
+        Ok(fetch_process_output(&self.channel_id))
     }
 
     async fn await_exit(&mut self) -> Result<Option<i64>, LinuxProcessError> {
         let mut channel = self.channel_mutex.lock().await;
         let status = await_process_exit(&mut channel).await;
         Ok(status)
-    }
-
-    async fn await_exit_with_output(mut self: Box<Self>) -> Result<LinuxProcessOutput, LinuxProcessError> {
-        let mut channel = self.channel_mutex.lock().await;
-        let status_code = await_process_exit(&mut channel).await;
-        Ok(fetch_process_output(&self.channel_id, status_code))
     }
 
     async fn begin_kill(&mut self) -> Result<(), LinuxProcessError> {
@@ -92,7 +86,14 @@ impl<'a> LinuxProcess for RusshLinuxProcess<'a> {
 
 impl Drop for RusshLinuxProcess<'_> {
     fn drop(&mut self) {
-        cleanup_buffers(&self.channel_id);
+        STDOUT_BUFFERS
+            .write()
+            .expect("Stdout rwlock was poisoned!")
+            .remove(&self.channel_id);
+        STDERR_BUFFERS
+            .write()
+            .expect("Stderr rwlock was poisoned!")
+            .remove(&self.channel_id);
     }
 }
 
@@ -112,11 +113,12 @@ where
     async fn execute(
         &self,
         process_configuration: &LinuxProcessConfiguration,
-    ) -> Result<LinuxProcessOutput, LinuxProcessError> {
+    ) -> Result<FinishedLinuxProcessOutput, LinuxProcessError> {
         let process = begin_execute_internal(&self, process_configuration).await?;
         let mut channel = process.channel_mutex.lock().await;
         let status_code = await_process_exit(&mut channel).await;
-        Ok(fetch_process_output(&channel.id(), status_code))
+        let output = fetch_process_output(&channel.id());
+        Ok(FinishedLinuxProcessOutput::join(output, status_code))
     }
 }
 
@@ -190,30 +192,7 @@ async fn await_process_exit(channel: &mut Channel<Msg>) -> Option<i64> {
     status_code
 }
 
-fn cleanup_buffers(channel_id: &ChannelId) {
-    STDOUT_BUFFERS
-        .write()
-        .expect("Stdout rwlock was poisoned!")
-        .remove(channel_id);
-    STDERR_BUFFERS
-        .write()
-        .expect("Stderr rwlock was poisoned!")
-        .remove(channel_id);
-}
-
-fn fetch_process_output(channel_id: &ChannelId, status_code: Option<i64>) -> LinuxProcessOutput {
-    let partial_output = fetch_partial_process_output(channel_id);
-    cleanup_buffers(channel_id);
-
-    LinuxProcessOutput {
-        stdout: partial_output.stdout,
-        stderr: partial_output.stderr,
-        stdout_extended: partial_output.stdout_extended,
-        status_code,
-    }
-}
-
-fn fetch_partial_process_output(channel_id: &ChannelId) -> LinuxProcessPartialOutput {
+fn fetch_process_output(channel_id: &ChannelId) -> LinuxProcessOutput {
     let stdout = match STDOUT_BUFFERS
         .read()
         .expect("Stdout rwlock was poisoned!")
@@ -240,7 +219,7 @@ fn fetch_partial_process_output(channel_id: &ChannelId) -> LinuxProcessPartialOu
         .map(|entry| (entry.ext, entry.buffer.as_ref().to_vec()))
         .collect();
 
-    LinuxProcessPartialOutput {
+    LinuxProcessOutput {
         stdout,
         stderr,
         stdout_extended,

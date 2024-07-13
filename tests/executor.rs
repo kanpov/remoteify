@@ -80,8 +80,8 @@ async fn interactive_command_with_no_eof_returning_stdout() {
             process.close_stdin().await.unwrap();
             let status_code = process.await_exit().await.unwrap();
             assert_eq!(status_code, Some(0));
-            let process_output = process.get_partial_output().unwrap();
-            assert_eq!(String::from_utf8(process_output.stdout).unwrap(), "test");
+            let process_output = process.get_current_output().unwrap();
+            assert_eq!(String::from_utf8(process_output.stdout).unwrap(), "test\n");
             assert!(process_output.stderr.is_empty());
         }
         .boxed()
@@ -96,11 +96,9 @@ where
 {
     let guard = SEQUENTIALITY_MUTEX.lock().await;
 
-    dbg!("RUNNING FOR NATIVE");
     let native = NativeLinux {};
     function(Box::new(native)).await;
 
-    dbg!("RUNNING FOR RUSSH");
     let russh_data = RusshData::setup().await;
     function(Box::new(russh_data.implementation)).await;
 
