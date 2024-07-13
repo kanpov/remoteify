@@ -67,7 +67,7 @@ impl LinuxProcess for OpensshLinuxProcess {
     }
 
     async fn begin_kill(&mut self) -> Result<(), LinuxProcessError> {
-        todo!()
+        self.write_to_stdin(b"^C").await.map(|_| ())
     }
 }
 
