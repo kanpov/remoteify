@@ -35,14 +35,14 @@ pub(super) struct StdextEntry {
     pub buffer: BytesMut,
 }
 
-struct RusshLinuxProcess<'a> {
+struct RusshLinuxProcess {
     pub(super) channel_id: ChannelId,
     pub(super) channel_mutex: Arc<Mutex<Channel<Msg>>>,
-    pub(super) stdin: Option<Pin<Box<dyn AsyncWrite + Send + 'a>>>,
+    pub(super) stdin: Option<Pin<Box<dyn AsyncWrite + Send>>>,
 }
 
 #[async_trait]
-impl<'a> LinuxProcess for RusshLinuxProcess<'a> {
+impl LinuxProcess for RusshLinuxProcess {
     fn id(&self) -> Option<u32> {
         None
     }
@@ -92,7 +92,7 @@ impl<'a> LinuxProcess for RusshLinuxProcess<'a> {
     }
 }
 
-impl Drop for RusshLinuxProcess<'_> {
+impl Drop for RusshLinuxProcess {
     fn drop(&mut self) {
         STDOUT_BUFFERS
             .write()
@@ -130,10 +130,10 @@ where
     }
 }
 
-async fn begin_execute_internal<'a, H: client::Handler>(
+async fn begin_execute_internal<H: client::Handler>(
     instance: &RusshLinux<H>,
     process_configuration: &LinuxProcessConfiguration,
-) -> Result<RusshLinuxProcess<'a>, LinuxProcessError> {
+) -> Result<RusshLinuxProcess, LinuxProcessError> {
     let handle = instance.handle_mutex.lock().await;
     let mut channel = handle
         .channel_open_session()
