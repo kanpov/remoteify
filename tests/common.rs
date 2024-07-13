@@ -8,8 +8,8 @@ use openssh::{Session, SessionBuilder};
 use openssh_sftp_client::{Sftp, SftpOptions};
 use remoteify::{
     filesystem::{LinuxDirEntry, LinuxFileType},
-    ssh_openssh::OpensshLinux,
-    ssh_russh::{
+    openssh::OpensshLinux,
+    russh::{
         connection::{RusshAuthentication, RusshConnectionOptions},
         RusshLinux, RusshPtyOptions,
     },

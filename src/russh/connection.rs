@@ -5,7 +5,7 @@ use russh_keys::key::KeyPair;
 use russh_sftp::client::SftpSession;
 use tokio::sync::Mutex;
 
-use crate::ssh_russh::RusshLinux;
+use crate::russh::RusshLinux;
 
 use super::RusshPtyOptions;
 

@@ -27,11 +27,11 @@ uuid = { version = "1.9.1", features = ["v4"] }
 tokio = { version = "1.38.0", features = ["macros"] }
 testcontainers = "0.20.0"
 openssh = { version = "0.10.4", features = ["native-mux"] }
-remoteify = { path = ".", features = ["native", "ssh_russh", "ssh_openssh"] }
+remoteify = { path = ".", features = ["native", "russh", "openssh"] }
 futures = "0.3.30"
 
 [features]
 default = []
 native = ["dep:once_cell"]
-ssh_russh = ["dep:russh", "dep:russh-keys", "dep:russh-sftp", "dep:once_cell"]
-ssh_openssh = ["dep:openssh", "dep:openssh-sftp-client", "dep:futures-util"]
+russh = ["dep:russh", "dep:russh-keys", "dep:russh-sftp", "dep:once_cell"]
+openssh = ["dep:openssh", "dep:openssh-sftp-client", "dep:futures-util"]

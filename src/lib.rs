@@ -5,8 +5,8 @@ pub mod network;
 #[cfg(feature = "native")]
 pub mod native;
 
-#[cfg(feature = "ssh_russh")]
-pub mod ssh_russh;
+#[cfg(feature = "russh")]
+pub mod russh;
 
-#[cfg(feature = "ssh_openssh")]
-pub mod ssh_openssh;
+#[cfg(feature = "openssh")]
+pub mod openssh;
