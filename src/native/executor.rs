@@ -129,22 +129,20 @@ impl LinuxExecutor for NativeLinux {
         let pid = child.id();
 
         if let Some(pid) = pid {
-            if !process_configuration.disable_extra_reads {
-                if process_configuration.redirect_stdout {
-                    STDOUT_BUFFERS
-                        .write()
-                        .expect("Stdout rwlock was poisoned!")
-                        .insert(pid, BytesMut::new());
-                    queue_capturer(&mut child, false);
-                }
+            if process_configuration.redirect_stdout {
+                STDOUT_BUFFERS
+                    .write()
+                    .expect("Stdout rwlock was poisoned!")
+                    .insert(pid, BytesMut::new());
+                queue_capturer(&mut child, false);
+            }
 
-                if process_configuration.redirect_stderr {
-                    STDERR_BUFFERS
-                        .write()
-                        .expect("Stderr rwlock was poisoned!")
-                        .insert(pid, BytesMut::new());
-                    queue_capturer(&mut child, true)
-                }
+            if process_configuration.redirect_stderr {
+                STDERR_BUFFERS
+                    .write()
+                    .expect("Stderr rwlock was poisoned!")
+                    .insert(pid, BytesMut::new());
+                queue_capturer(&mut child, true)
             }
         }
 

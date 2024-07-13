@@ -11,7 +11,6 @@ pub struct LinuxProcessConfiguration {
     pub(crate) redirect_stdout: bool,
     pub(crate) redirect_stdin: bool,
     pub(crate) redirect_stderr: bool,
-    pub(crate) disable_extra_reads: bool,
     pub(crate) user_id: Option<u32>,
     pub(crate) group_id: Option<u32>,
     pub(crate) process_group_id: Option<u32>,
@@ -27,7 +26,6 @@ impl LinuxProcessConfiguration {
             redirect_stdout: false,
             redirect_stdin: false,
             redirect_stderr: false,
-            disable_extra_reads: false,
             user_id: None,
             group_id: None,
             process_group_id: None,
@@ -79,11 +77,6 @@ impl LinuxProcessConfiguration {
         self
     }
 
-    pub fn disable_extra_reads(&mut self) -> &mut Self {
-        self.disable_extra_reads = true;
-        self
-    }
-
     pub fn user_id(&mut self, user_id: u32) -> &mut Self {
         self.user_id = Some(user_id);
         self
@@ -106,7 +99,6 @@ pub enum LinuxProcessError {
     StdinNotPiped,
     StdoutNotPiped,
     StderrNotPiped,
-    StreamPipedButNotFound,
     IO(std::io::Error),
     Other(Box<dyn std::error::Error>),
 }
