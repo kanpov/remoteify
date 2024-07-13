@@ -35,7 +35,7 @@ pub(super) struct StdextEntry {
     pub buffer: BytesMut,
 }
 
-pub struct RusshLinuxProcess<'a> {
+struct RusshLinuxProcess<'a> {
     pub(super) channel_id: ChannelId,
     pub(super) channel_mutex: Arc<Mutex<Channel<Msg>>>,
     pub(super) stdin: Option<Pin<Box<dyn AsyncWrite + Send + 'a>>>,
@@ -244,8 +244,8 @@ async fn apply_process_configuration(
         command = env_string + command.as_str();
     }
 
-    if let Some(path) = &process_configuration.working_dir {
-        command = format!("(cd {} && {})", path.to_str().unwrap(), command);
+    if let Some(working_dir) = &process_configuration.working_dir {
+        command = format!("(cd {:?} && {})", working_dir, command);
     }
 
     channel.exec(true, command).await?;

@@ -22,7 +22,7 @@ use super::NativeLinux;
 static STDOUT_BUFFERS: Lazy<Arc<RwLock<HashMap<u32, BytesMut>>>> = Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
 static STDERR_BUFFERS: Lazy<Arc<RwLock<HashMap<u32, BytesMut>>>> = Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
 
-pub struct NativeLinuxProcess {
+struct NativeLinuxProcess {
     child: Child,
     stdin: Option<ChildStdin>,
     redirect_stdout: bool,
