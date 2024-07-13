@@ -1,4 +1,4 @@
-use common::RusshData;
+use common::{OpensshData, RusshData};
 use futures::{future::BoxFuture, FutureExt};
 use remoteify::{
     executor::{LinuxExecutor, LinuxProcessConfiguration},
@@ -78,9 +78,8 @@ async fn interactive_command_with_no_eof_returning_stdout() {
             let mut process = executor.begin_execute(&config).await.unwrap();
             process.write_to_stdin(b"echo \"test\" ; exit").await.unwrap();
             process.close_stdin().await.unwrap();
-            let status_code = process.await_exit().await.unwrap();
-            assert_eq!(status_code, Some(0));
-            let process_output = process.get_current_output().unwrap();
+            let process_output = process.await_exit_with_output().await.unwrap();
+            assert_eq!(process_output.status_code, Some(0));
             assert_eq!(String::from_utf8(process_output.stdout).unwrap(), "test\n");
             assert!(process_output.stderr.is_empty());
         }
@@ -89,6 +88,7 @@ async fn interactive_command_with_no_eof_returning_stdout() {
     .await;
 }
 
+// run the same test on 3 executor impls: native, openssh, ru
 async fn executor_test<F>(function: F)
 where
     F: FnOnce(Box<dyn LinuxExecutor + Send + '_>) -> BoxFuture<()>,
@@ -101,6 +101,9 @@ where
 
     let russh_data = RusshData::setup().await;
     function(Box::new(russh_data.implementation)).await;
+
+    let openssh_data = OpensshData::setup().await;
+    function(Box::new(openssh_data.implementation)).await;
 
     drop(guard);
 }

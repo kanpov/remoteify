@@ -68,10 +68,18 @@ impl<'a> LinuxProcess for RusshLinuxProcess<'a> {
         Ok(fetch_process_output(&self.channel_id))
     }
 
-    async fn await_exit(&mut self) -> Result<Option<i64>, LinuxProcessError> {
+    async fn await_exit(self: Box<Self>) -> Result<Option<i64>, LinuxProcessError> {
         let mut channel = self.channel_mutex.lock().await;
         let status = await_process_exit(&mut channel).await;
         Ok(status)
+    }
+
+    async fn await_exit_with_output(self: Box<Self>) -> Result<FinishedLinuxProcessOutput, LinuxProcessError> {
+        let mut channel = self.channel_mutex.lock().await;
+        let status_code = await_process_exit(&mut channel).await;
+        drop(channel);
+        let output = self.get_current_output()?;
+        Ok(FinishedLinuxProcessOutput::join(output, status_code))
     }
 
     async fn begin_kill(&mut self) -> Result<(), LinuxProcessError> {

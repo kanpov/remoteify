@@ -139,17 +139,13 @@ pub trait LinuxProcess: Send {
 
     fn get_current_output(&self) -> Result<LinuxProcessOutput, LinuxProcessError>;
 
-    async fn await_exit(&mut self) -> Result<Option<i64>, LinuxProcessError>;
+    async fn await_exit(mut self: Box<Self>) -> Result<Option<i64>, LinuxProcessError>;
 
-    async fn await_exit_with_output(mut self: Box<Self>) -> Result<FinishedLinuxProcessOutput, LinuxProcessError> {
-        let status_code = self.await_exit().await?;
-        let output = self.get_current_output()?;
-        Ok(FinishedLinuxProcessOutput::join(output, status_code))
-    }
+    async fn await_exit_with_output(mut self: Box<Self>) -> Result<FinishedLinuxProcessOutput, LinuxProcessError>;
 
     async fn begin_kill(&mut self) -> Result<(), LinuxProcessError>;
 
-    async fn kill(&mut self) -> Result<Option<i64>, LinuxProcessError> {
+    async fn kill(mut self: Box<Self>) -> Result<Option<i64>, LinuxProcessError> {
         self.begin_kill().await?;
         self.await_exit().await
     }

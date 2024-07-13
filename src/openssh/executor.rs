@@ -1,10 +1,15 @@
-use std::sync::{
-    atomic::{AtomicU32, Ordering},
-    Arc,
+use std::{
+    collections::HashMap,
+    process::Output,
+    sync::{
+        atomic::{AtomicU32, Ordering},
+        Arc,
+    },
 };
 
 use async_trait::async_trait;
-use openssh::{Child, OwningCommand, Session, Stdio};
+use openssh::{Child, ChildStdin, OwningCommand, Session, Stdio};
+use tokio::io::AsyncWriteExt;
 
 use crate::executor::{
     FinishedLinuxProcessOutput, LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError,
@@ -17,6 +22,7 @@ static SYNTHETIC_ID_GENERATOR: AtomicU32 = AtomicU32::new(0);
 
 struct OpensshLinuxProcess {
     child: Child<Arc<Session>>,
+    stdin: Option<ChildStdin>,
     synthetic_id: u32,
 }
 
@@ -27,18 +33,36 @@ impl LinuxProcess for OpensshLinuxProcess {
     }
 
     async fn write_to_stdin(&mut self, data: &[u8]) -> Result<usize, LinuxProcessError> {
-        todo!()
+        let stdin = self.stdin.as_mut().ok_or(LinuxProcessError::StdinNotPiped)?;
+        stdin
+            .write(data)
+            .await
+            .map_err(|err| LinuxProcessError::Other(Box::new(err)))
     }
 
     async fn close_stdin(&mut self) -> Result<(), LinuxProcessError> {
-        todo!()
+        match &self.stdin {
+            Some(_) => {
+                drop(self.stdin.take());
+                Ok(())
+            }
+            None => Err(LinuxProcessError::StdinNotPiped),
+        }
     }
 
     fn get_current_output(&self) -> Result<LinuxProcessOutput, LinuxProcessError> {
         todo!()
     }
 
-    async fn await_exit(&mut self) -> Result<Option<i64>, LinuxProcessError> {
+    async fn await_exit(self: Box<Self>) -> Result<Option<i64>, LinuxProcessError> {
+        self.child
+            .wait()
+            .await
+            .map(|status| status.code().map(|i| i.into()))
+            .map_err(|err| LinuxProcessError::Other(Box::new(err)))
+    }
+
+    async fn await_exit_with_output(self: Box<Self>) -> Result<FinishedLinuxProcessOutput, LinuxProcessError> {
         todo!()
     }
 
@@ -53,21 +77,40 @@ impl LinuxExecutor for OpensshLinux {
         &self,
         process_configuration: &LinuxProcessConfiguration,
     ) -> Result<Box<dyn LinuxProcess>, LinuxProcessError> {
-        let mut owning_command = apply_process_configuration(&self, &process_configuration);
-        let child = owning_command
+        let mut owning_command = create_owning_command(&self, &process_configuration);
+        let mut child = owning_command
             .spawn()
             .await
             .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
         let synthetic_id = SYNTHETIC_ID_GENERATOR.fetch_add(1, Ordering::Relaxed);
+        let stdin = child.stdin().take();
 
-        Ok(Box::new(OpensshLinuxProcess { child, synthetic_id }))
+        Ok(Box::new(OpensshLinuxProcess {
+            child,
+            synthetic_id,
+            stdin,
+        }))
     }
 
     async fn execute(
         &self,
         process_configuration: &LinuxProcessConfiguration,
     ) -> Result<FinishedLinuxProcessOutput, LinuxProcessError> {
-        todo!()
+        let mut owning_command = create_owning_command(&self, &process_configuration);
+        let output = owning_command
+            .output()
+            .await
+            .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
+        Ok(conv_finished_output(output))
+    }
+}
+
+fn conv_finished_output(value: Output) -> FinishedLinuxProcessOutput {
+    FinishedLinuxProcessOutput {
+        stdout: value.stdout,
+        stderr: value.stderr,
+        stdout_extended: HashMap::new(),
+        status_code: value.status.code().map(|i| i.into()),
     }
 }
 
@@ -84,7 +127,7 @@ impl ArcShellExt for Session {
     }
 }
 
-fn apply_process_configuration(
+fn create_owning_command(
     instance: &OpensshLinux,
     process_configuration: &LinuxProcessConfiguration,
 ) -> OwningCommand<Arc<Session>> {
@@ -104,7 +147,7 @@ fn apply_process_configuration(
         if process_configuration.redirect_stdin {
             owning_command.stdin(Stdio::piped());
         } else {
-            owning_command.stderr(Stdio::null());
+            owning_command.stdin(Stdio::null());
         }
     };
 

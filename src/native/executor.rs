@@ -79,7 +79,7 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
         self.child.start_kill().map_err(LinuxProcessError::IO)
     }
 
-    async fn await_exit(&mut self) -> Result<Option<i64>, LinuxProcessError> {
+    async fn await_exit(mut self: Box<Self>) -> Result<Option<i64>, LinuxProcessError> {
         let status = self
             .child
             .wait()
@@ -87,6 +87,17 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
             .map(|status| status.code().map(|i| i.into()))
             .map_err(LinuxProcessError::IO)?;
         Ok(status)
+    }
+
+    async fn await_exit_with_output(mut self: Box<Self>) -> Result<FinishedLinuxProcessOutput, LinuxProcessError> {
+        let status_code = self
+            .child
+            .wait()
+            .await
+            .map(|status| status.code().map(|i| i.into()))
+            .map_err(LinuxProcessError::IO)?;
+        let output = self.get_current_output()?;
+        Ok(FinishedLinuxProcessOutput::join(output, status_code))
     }
 }
 
@@ -106,14 +117,12 @@ impl Drop for NativeLinuxProcess {
     }
 }
 
-impl From<Output> for FinishedLinuxProcessOutput {
-    fn from(value: Output) -> Self {
-        FinishedLinuxProcessOutput {
-            stdout: value.stdout,
-            stderr: value.stderr,
-            stdout_extended: HashMap::new(),
-            status_code: value.status.code().map(|i| i.into()),
-        }
+fn conv_finished_output(value: Output) -> FinishedLinuxProcessOutput {
+    FinishedLinuxProcessOutput {
+        stdout: value.stdout,
+        stderr: value.stderr,
+        stdout_extended: HashMap::new(),
+        status_code: value.status.code().map(|i| i.into()),
     }
 }
 
@@ -161,7 +170,7 @@ impl LinuxExecutor for NativeLinux {
     ) -> Result<FinishedLinuxProcessOutput, LinuxProcessError> {
         let mut command = create_command_from_config(process_configuration);
         let os_output = command.output().await.map_err(LinuxProcessError::IO)?;
-        Ok(os_output.into())
+        Ok(conv_finished_output(os_output))
     }
 }
 
