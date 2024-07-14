@@ -207,20 +207,23 @@ fn create_owning_command(
             env_str.push_str(" ");
         }
 
-        let mut cmd = process_configuration.program.clone();
+        let mut command = process_configuration.program.clone();
         if process_configuration.args.len() > 0 {
-            cmd.push_str(" ");
-            cmd.push_str(process_configuration.args.join(" ").as_str());
+            command.push_str(" ");
+            for arg in &process_configuration.args {
+                command.push_str(shell_escape::unix::escape(arg.into()).as_ref());
+                command.push_str(" ");
+            }
         }
         if process_configuration.envs.len() > 0 {
-            cmd = env_str + cmd.as_str();
+            command = env_str + command.as_str();
         }
 
         if let Some(working_dir) = &process_configuration.working_dir {
-            cmd = format!("(cd {:?} && {})", working_dir, cmd);
+            command = format!("(cd {} && {})", working_dir, command);
         }
 
-        let mut owning_command = instance.session.clone().arc_shell(cmd);
+        let mut owning_command = instance.session.clone().arc_shell(command);
         apply_pipes(&mut owning_command);
         owning_command
     }

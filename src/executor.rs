@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ffi::OsString};
+use std::collections::HashMap;
 
 use async_trait::async_trait;
 
@@ -7,7 +7,7 @@ pub struct LinuxProcessConfiguration {
     pub(crate) program: String,
     pub(crate) args: Vec<String>,
     pub(crate) envs: HashMap<String, String>,
-    pub(crate) working_dir: Option<OsString>,
+    pub(crate) working_dir: Option<String>,
     pub(crate) redirect_stdout: bool,
     pub(crate) redirect_stdin: bool,
     pub(crate) redirect_stderr: bool,
@@ -37,8 +37,10 @@ impl LinuxProcessConfiguration {
         self
     }
 
-    pub fn args(&mut self, arguments: &mut Vec<String>) -> &mut Self {
-        self.args.append(arguments);
+    pub fn args(&mut self, arguments: Vec<impl Into<String>>) -> &mut Self {
+        for arg in arguments {
+            self.args.push(arg.into());
+        }
         self
     }
 
@@ -47,8 +49,10 @@ impl LinuxProcessConfiguration {
         self
     }
 
-    pub fn envs(&mut self, environment: HashMap<String, String>) -> &mut Self {
-        self.envs.extend(environment);
+    pub fn envs<K: Into<String>, V: Into<String>>(&mut self, environment: HashMap<K, V>) -> &mut Self {
+        for (env_key, env_value) in environment {
+            self.envs.insert(env_key.into(), env_value.into());
+        }
         self
     }
 
@@ -57,7 +61,7 @@ impl LinuxProcessConfiguration {
         self
     }
 
-    pub fn working_dir(&mut self, working_dir: impl Into<OsString>) -> &mut Self {
+    pub fn working_dir(&mut self, working_dir: impl Into<String>) -> &mut Self {
         self.working_dir = Some(working_dir.into());
         self
     }

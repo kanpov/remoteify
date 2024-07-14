@@ -245,15 +245,18 @@ async fn apply_process_configuration(
 
     let mut command = process_configuration.program.clone();
     if process_configuration.args.len() > 0 {
-        command += " ";
-        command += process_configuration.args.join(" ").as_str();
+        command.push_str(" ");
+        for arg in &process_configuration.args {
+            command.push_str(shell_escape::unix::escape(arg.into()).as_ref());
+            command.push_str(" ");
+        }
     }
     if env_string.len() > 0 {
         command = env_string + command.as_str();
     }
 
     if let Some(working_dir) = &process_configuration.working_dir {
-        command = format!("(cd {:?} && {})", working_dir, command);
+        command = format!("(cd {} && {})", working_dir, command);
     }
 
     channel.exec(true, command).await?;
