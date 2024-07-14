@@ -4,13 +4,9 @@ use remoteify::{
     executor::{LinuxExecutor, LinuxProcessConfiguration},
     native::NativeLinux,
 };
-use tokio::sync::Mutex;
 use uuid::Uuid;
 
 mod common;
-
-static SEQUENTIALITY_MUTEX: Mutex<()> = Mutex::const_new(());
-
 #[tokio::test]
 async fn simple_command_outputting() {
     executor_test(|executor| {
@@ -97,9 +93,7 @@ where
     let russh_data = RusshData::setup().await;
     let openssh_data = OpensshData::setup().await;
 
-    let guard = SEQUENTIALITY_MUTEX.lock().await;
     function(Box::new(native)).await;
     function(Box::new(russh_data.implementation)).await;
     function(Box::new(openssh_data.implementation)).await;
-    drop(guard);
 }

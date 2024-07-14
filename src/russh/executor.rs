@@ -23,20 +23,27 @@ use crate::executor::{
 
 use super::RusshLinux;
 
-pub(super) static STDOUT_BUFFERS: Lazy<Arc<RwLock<HashMap<ChannelId, BytesMut>>>> =
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub(super) struct InternalId {
+    pub channel_id: ChannelId,
+    pub instance_id: u16,
+}
+
+pub(super) static STDOUT_BUFFERS: Lazy<Arc<RwLock<HashMap<InternalId, BytesMut>>>> =
     Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
-pub(super) static STDERR_BUFFERS: Lazy<Arc<RwLock<HashMap<ChannelId, BytesMut>>>> =
+pub(super) static STDERR_BUFFERS: Lazy<Arc<RwLock<HashMap<InternalId, BytesMut>>>> =
     Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
 pub(super) static STDEXT_BUFFERS: Lazy<Arc<RwLock<Vec<StdextEntry>>>> = Lazy::new(|| Arc::new(RwLock::new(Vec::new())));
 
 pub(super) struct StdextEntry {
     pub channel_id: ChannelId,
+    pub instance_id: u16,
     pub ext: u32,
     pub buffer: BytesMut,
 }
 
 struct RusshLinuxProcess {
-    pub(super) channel_id: ChannelId,
+    pub(super) internal_id: InternalId,
     pub(super) channel_mutex: Arc<Mutex<Channel<Msg>>>,
     pub(super) stdin: Option<Pin<Box<dyn AsyncWrite + Send>>>,
 }
@@ -65,7 +72,7 @@ impl LinuxProcess for RusshLinuxProcess {
     }
 
     fn get_current_output(&self) -> Result<LinuxProcessOutput, LinuxProcessError> {
-        Ok(fetch_process_output(&self.channel_id))
+        Ok(fetch_process_output(&self.internal_id))
     }
 
     async fn await_exit(self: Box<Self>) -> Result<Option<i64>, LinuxProcessError> {
@@ -97,11 +104,11 @@ impl Drop for RusshLinuxProcess {
         STDOUT_BUFFERS
             .write()
             .expect("Stdout rwlock was poisoned!")
-            .remove(&self.channel_id);
+            .remove(&self.internal_id);
         STDERR_BUFFERS
             .write()
             .expect("Stderr rwlock was poisoned!")
-            .remove(&self.channel_id);
+            .remove(&self.internal_id);
     }
 }
 
@@ -125,7 +132,10 @@ where
         let process = begin_execute_internal(&self, process_configuration).await?;
         let mut channel = process.channel_mutex.lock().await;
         let status_code = await_process_exit(&mut channel).await;
-        let output = fetch_process_output(&channel.id());
+        let output = fetch_process_output(&InternalId {
+            channel_id: channel.id(),
+            instance_id: self.id,
+        });
         Ok(FinishedLinuxProcessOutput::join(output, status_code))
     }
 }
@@ -144,16 +154,22 @@ async fn begin_execute_internal<H: client::Handler>(
         .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
 
     if process_configuration.redirect_stdout {
-        STDOUT_BUFFERS
-            .write()
-            .expect("Stdout rwlock was poisoned!")
-            .insert(channel.id(), BytesMut::new());
+        STDOUT_BUFFERS.write().expect("Stdout rwlock was poisoned!").insert(
+            InternalId {
+                channel_id: channel.id(),
+                instance_id: instance.id,
+            },
+            BytesMut::new(),
+        );
     }
     if process_configuration.redirect_stderr {
-        STDERR_BUFFERS
-            .write()
-            .expect("Stderr rwlock was poisoned!")
-            .insert(channel.id(), BytesMut::new());
+        STDERR_BUFFERS.write().expect("Stderr rwlock was poisoned!").insert(
+            InternalId {
+                channel_id: channel.id(),
+                instance_id: instance.id,
+            },
+            BytesMut::new(),
+        );
     }
 
     if process_configuration.redirect_stdin {
@@ -178,7 +194,10 @@ async fn begin_execute_internal<H: client::Handler>(
     };
 
     Ok(RusshLinuxProcess {
-        channel_id: channel.id(),
+        internal_id: InternalId {
+            channel_id: channel.id(),
+            instance_id: instance.id,
+        },
         channel_mutex: Arc::new(Mutex::new(channel)),
         stdin: stdin_option,
     })
@@ -200,11 +219,11 @@ async fn await_process_exit(channel: &mut Channel<Msg>) -> Option<i64> {
     status_code
 }
 
-fn fetch_process_output(channel_id: &ChannelId) -> LinuxProcessOutput {
+fn fetch_process_output(internal_id: &InternalId) -> LinuxProcessOutput {
     let stdout = match STDOUT_BUFFERS
         .read()
         .expect("Stdout rwlock was poisoned!")
-        .get(&channel_id)
+        .get(internal_id)
     {
         Some(buf) => buf.to_vec(),
         None => Vec::new(),
@@ -213,7 +232,7 @@ fn fetch_process_output(channel_id: &ChannelId) -> LinuxProcessOutput {
     let stderr = match STDERR_BUFFERS
         .read()
         .expect("Stderr rwlock was poisoned!")
-        .get(&channel_id)
+        .get(internal_id)
     {
         Some(buf) => buf.to_vec(),
         None => Vec::new(),
@@ -223,7 +242,7 @@ fn fetch_process_output(channel_id: &ChannelId) -> LinuxProcessOutput {
         .read()
         .expect("Stdext rwlock was poisoned!")
         .iter()
-        .filter(|entry| entry.channel_id == *channel_id)
+        .filter(|entry| entry.channel_id == internal_id.channel_id && entry.instance_id == internal_id.instance_id)
         .map(|entry| (entry.ext, entry.buffer.as_ref().to_vec()))
         .collect();
 

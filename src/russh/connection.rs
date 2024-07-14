@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicU16, Ordering},
+    Arc,
+};
 
 use russh::client;
 use russh_keys::key::KeyPair;
@@ -8,6 +11,8 @@ use tokio::sync::Mutex;
 use crate::russh::RusshLinux;
 
 use super::RusshPtyOptions;
+
+static INSTANCE_ID_GENERATOR: AtomicU16 = AtomicU16::new(0);
 
 #[derive(Debug)]
 pub enum RusshConnectionError<H>
@@ -48,10 +53,15 @@ where
     where
         H: 'static,
     {
+        let instance_id = INSTANCE_ID_GENERATOR.fetch_add(1, Ordering::Relaxed);
+
         let mut handle = client::connect(
             Arc::new(connection_options.config),
             (connection_options.host, connection_options.port),
-            super::WrappingHandler { inner: handler },
+            super::WrappingHandler {
+                inner: handler,
+                instance_id,
+            },
         )
         .await
         .map_err(|err| RusshConnectionError::ConnectionError(err))?;
@@ -92,6 +102,7 @@ where
             .map_err(|err| RusshConnectionError::SftpChannelOpenError(err))?;
 
         Ok(RusshLinux {
+            id: instance_id,
             pty_options,
             handle_mutex: Arc::new(Mutex::new(handle)),
             fs_channel_mutex: Arc::new(Mutex::new(fs_ssh_channel)),
