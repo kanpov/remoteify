@@ -1,11 +1,12 @@
 use std::{
     collections::HashMap,
     process::{Output, Stdio},
-    sync::{Arc, RwLock},
+    sync::Arc,
 };
 
 use async_trait::async_trait;
 use bytes::BytesMut;
+use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines},
@@ -19,8 +20,8 @@ use crate::executor::{
 
 use super::NativeLinux;
 
-static STDOUT_BUFFERS: Lazy<Arc<RwLock<HashMap<u32, BytesMut>>>> = Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
-static STDERR_BUFFERS: Lazy<Arc<RwLock<HashMap<u32, BytesMut>>>> = Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+static STDOUT_BUFFERS: Lazy<Arc<DashMap<u32, BytesMut>>> = Lazy::new(|| Arc::new(DashMap::new()));
+static STDERR_BUFFERS: Lazy<Arc<DashMap<u32, BytesMut>>> = Lazy::new(|| Arc::new(DashMap::new()));
 
 struct NativeLinuxProcess {
     child: Child,
@@ -57,13 +58,13 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
         let mut stderr: Vec<u8> = Vec::new();
 
         if self.redirect_stdout {
-            if let Some(buf) = STDOUT_BUFFERS.read().expect("Stdout rwlock was poisoned!").get(&pid) {
+            if let Some(buf) = STDOUT_BUFFERS.get(&pid) {
                 stdout = buf.to_vec();
             }
         }
 
         if self.redirect_stderr {
-            if let Some(buf) = STDERR_BUFFERS.read().expect("Stderr rwlock was poisoned!").get(&pid) {
+            if let Some(buf) = STDERR_BUFFERS.get(&pid) {
                 stderr = buf.to_vec();
             }
         }
@@ -104,15 +105,8 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
 impl Drop for NativeLinuxProcess {
     fn drop(&mut self) {
         if let Some(pid) = self.pid {
-            STDOUT_BUFFERS
-                .write()
-                .expect("Stdout rwlock was poisoned!")
-                .remove(&pid);
-
-            STDERR_BUFFERS
-                .write()
-                .expect("Stderr rwlock was poisoned!")
-                .remove(&pid);
+            STDOUT_BUFFERS.remove(&pid);
+            STDERR_BUFFERS.remove(&pid);
         }
     }
 }
@@ -139,18 +133,12 @@ impl LinuxExecutor for NativeLinux {
 
         if let Some(pid) = pid {
             if process_configuration.redirect_stdout {
-                STDOUT_BUFFERS
-                    .write()
-                    .expect("Stdout rwlock was poisoned!")
-                    .insert(pid, BytesMut::new());
+                STDOUT_BUFFERS.insert(pid, BytesMut::new());
                 queue_capturer(&mut child, false);
             }
 
             if process_configuration.redirect_stderr {
-                STDERR_BUFFERS
-                    .write()
-                    .expect("Stderr rwlock was poisoned!")
-                    .insert(pid, BytesMut::new());
+                STDERR_BUFFERS.insert(pid, BytesMut::new());
                 queue_capturer(&mut child, true)
             }
         }
@@ -206,12 +194,12 @@ fn queue_capturer(child: &mut Child, is_stderr: bool) {
                 Err(_) => break,
             };
 
-            let mut write_ref = match is_stderr {
-                true => STDERR_BUFFERS.write().expect("Stderr rwlock was poisoned!"),
-                false => STDOUT_BUFFERS.write().expect("Stdout rwlock was poisoned!"),
+            let write_ref = match is_stderr {
+                true => STDERR_BUFFERS.as_ref(),
+                false => STDOUT_BUFFERS.as_ref(),
             };
             match write_ref.get_mut(&pid) {
-                Some(buf) => {
+                Some(mut buf) => {
                     buf.extend(line.as_bytes());
                     buf.extend(b"\n");
                 }

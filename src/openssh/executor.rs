@@ -3,12 +3,13 @@ use std::{
     process::Output,
     sync::{
         atomic::{AtomicU32, Ordering},
-        Arc, RwLock,
+        Arc,
     },
 };
 
 use async_trait::async_trait;
 use bytes::BytesMut;
+use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use openssh::{Child, ChildStdin, OwningCommand, Session, Stdio};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -21,8 +22,8 @@ use crate::executor::{
 use super::OpensshLinux;
 
 static SYNTHETIC_ID_GENERATOR: AtomicU32 = AtomicU32::new(0);
-static STDOUT_BUFFERS: Lazy<Arc<RwLock<HashMap<u32, BytesMut>>>> = Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
-static STDERR_BUFFERS: Lazy<Arc<RwLock<HashMap<u32, BytesMut>>>> = Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+static STDOUT_BUFFERS: Lazy<Arc<DashMap<u32, BytesMut>>> = Lazy::new(|| Arc::new(DashMap::new()));
+static STDERR_BUFFERS: Lazy<Arc<DashMap<u32, BytesMut>>> = Lazy::new(|| Arc::new(DashMap::new()));
 
 struct OpensshLinuxProcess {
     child: Child<Arc<Session>>,
@@ -151,19 +152,11 @@ fn get_current_output_internal(synthetic_id: u32) -> LinuxProcessOutput {
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
 
-    if let Some(buf) = STDOUT_BUFFERS
-        .read()
-        .expect("Stdout rwlock was poisoned!")
-        .get(&synthetic_id)
-    {
+    if let Some(buf) = STDOUT_BUFFERS.get(&synthetic_id) {
         stdout = buf.to_vec();
     }
 
-    if let Some(buf) = STDERR_BUFFERS
-        .read()
-        .expect("Stderr rwlock was poisoned!")
-        .get(&synthetic_id)
-    {
+    if let Some(buf) = STDERR_BUFFERS.get(&synthetic_id) {
         stderr = buf.to_vec();
     }
 
@@ -244,17 +237,11 @@ fn spawn_capture_task(synthetic_id: u32, capturer_type: CapturerType, child: &mu
 
     match capturer_type {
         CapturerType::Stdout => {
-            STDOUT_BUFFERS
-                .write()
-                .expect("Stdout rwlock was poisoned!")
-                .insert(synthetic_id, BytesMut::new());
+            STDOUT_BUFFERS.insert(synthetic_id, BytesMut::new());
             stdout_reader = Some(BufReader::new(child.stdout().take().unwrap()).lines());
         }
         CapturerType::Stderr => {
-            STDERR_BUFFERS
-                .write()
-                .expect("Stderr rwlock was poisoned!")
-                .insert(synthetic_id, BytesMut::new());
+            STDERR_BUFFERS.insert(synthetic_id, BytesMut::new());
             stderr_reader = Some(BufReader::new(child.stderr().take().unwrap()).lines());
         }
     }
@@ -270,12 +257,12 @@ fn spawn_capture_task(synthetic_id: u32, capturer_type: CapturerType, child: &mu
                 Err(_) => break,
             };
 
-            let mut write_ref = match capturer_type {
-                CapturerType::Stdout => STDOUT_BUFFERS.write().expect("Stdout rwlock was poisoned!"),
-                CapturerType::Stderr => STDERR_BUFFERS.write().expect("Stderr rwlock was poisoned!"),
+            let write_ref = match capturer_type {
+                CapturerType::Stdout => STDOUT_BUFFERS.as_ref(),
+                CapturerType::Stderr => STDERR_BUFFERS.as_ref(),
             };
             match write_ref.get_mut(&synthetic_id) {
-                Some(buf_ref) => buf_ref.extend(line.as_bytes()),
+                Some(mut buf) => buf.extend(line.as_bytes()),
                 None => break,
             }
         }

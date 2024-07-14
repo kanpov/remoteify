@@ -1,11 +1,8 @@
-use std::{
-    collections::HashMap,
-    pin::Pin,
-    sync::{Arc, RwLock},
-};
+use std::{pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::BytesMut;
+use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use russh::{
     client::{self, Msg},
@@ -29,17 +26,15 @@ pub(super) struct InternalId {
     pub instance_id: u16,
 }
 
-pub(super) static STDOUT_BUFFERS: Lazy<Arc<RwLock<HashMap<InternalId, BytesMut>>>> =
-    Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
-pub(super) static STDERR_BUFFERS: Lazy<Arc<RwLock<HashMap<InternalId, BytesMut>>>> =
-    Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
-pub(super) static STDEXT_BUFFERS: Lazy<Arc<RwLock<Vec<StdextEntry>>>> = Lazy::new(|| Arc::new(RwLock::new(Vec::new())));
+pub(super) static STDOUT_BUFFERS: Lazy<Arc<DashMap<InternalId, BytesMut>>> = Lazy::new(|| Arc::new(DashMap::new()));
+pub(super) static STDERR_BUFFERS: Lazy<Arc<DashMap<InternalId, BytesMut>>> = Lazy::new(|| Arc::new(DashMap::new()));
+pub(super) static STDEXT_BUFFERS: Lazy<Arc<DashMap<StdextKey, BytesMut>>> = Lazy::new(|| Arc::new(DashMap::new()));
 
-pub(super) struct StdextEntry {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(super) struct StdextKey {
     pub channel_id: ChannelId,
     pub instance_id: u16,
     pub ext: u32,
-    pub buffer: BytesMut,
 }
 
 struct RusshLinuxProcess {
@@ -92,7 +87,7 @@ impl LinuxProcess for RusshLinuxProcess {
     async fn begin_kill(&mut self) -> Result<(), LinuxProcessError> {
         let channel = self.channel_mutex.lock().await;
         channel
-            .signal(Sig::KILL)
+            .signal(Sig::INT)
             .await
             .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
         Ok(())
@@ -101,14 +96,8 @@ impl LinuxProcess for RusshLinuxProcess {
 
 impl Drop for RusshLinuxProcess {
     fn drop(&mut self) {
-        STDOUT_BUFFERS
-            .write()
-            .expect("Stdout rwlock was poisoned!")
-            .remove(&self.internal_id);
-        STDERR_BUFFERS
-            .write()
-            .expect("Stderr rwlock was poisoned!")
-            .remove(&self.internal_id);
+        STDOUT_BUFFERS.remove(&self.internal_id);
+        STDERR_BUFFERS.remove(&self.internal_id);
     }
 }
 
@@ -154,7 +143,7 @@ async fn begin_execute_internal<H: client::Handler>(
         .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
 
     if process_configuration.redirect_stdout {
-        STDOUT_BUFFERS.write().expect("Stdout rwlock was poisoned!").insert(
+        STDOUT_BUFFERS.insert(
             InternalId {
                 channel_id: channel.id(),
                 instance_id: instance.id,
@@ -163,7 +152,7 @@ async fn begin_execute_internal<H: client::Handler>(
         );
     }
     if process_configuration.redirect_stderr {
-        STDERR_BUFFERS.write().expect("Stderr rwlock was poisoned!").insert(
+        STDERR_BUFFERS.insert(
             InternalId {
                 channel_id: channel.id(),
                 instance_id: instance.id,
@@ -220,30 +209,22 @@ async fn await_process_exit(channel: &mut Channel<Msg>) -> Option<i64> {
 }
 
 fn fetch_process_output(internal_id: &InternalId) -> LinuxProcessOutput {
-    let stdout = match STDOUT_BUFFERS
-        .read()
-        .expect("Stdout rwlock was poisoned!")
-        .get(internal_id)
-    {
+    let stdout = match STDOUT_BUFFERS.get(internal_id) {
         Some(buf) => buf.to_vec(),
         None => Vec::new(),
     };
 
-    let stderr = match STDERR_BUFFERS
-        .read()
-        .expect("Stderr rwlock was poisoned!")
-        .get(internal_id)
-    {
+    let stderr = match STDERR_BUFFERS.get(internal_id) {
         Some(buf) => buf.to_vec(),
         None => Vec::new(),
     };
 
     let stdout_extended = STDEXT_BUFFERS
-        .read()
-        .expect("Stdext rwlock was poisoned!")
         .iter()
-        .filter(|entry| entry.channel_id == internal_id.channel_id && entry.instance_id == internal_id.instance_id)
-        .map(|entry| (entry.ext, entry.buffer.as_ref().to_vec()))
+        .filter(|entry| {
+            entry.key().channel_id == internal_id.channel_id && entry.key().instance_id == internal_id.instance_id
+        })
+        .map(|entry| (entry.key().ext, entry.value().to_vec()))
         .collect();
 
     LinuxProcessOutput {

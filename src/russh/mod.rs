@@ -6,7 +6,7 @@ mod network;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use executor::{InternalId, StdextEntry, STDERR_BUFFERS, STDEXT_BUFFERS, STDOUT_BUFFERS};
+use executor::{InternalId, StdextKey, STDERR_BUFFERS, STDEXT_BUFFERS, STDOUT_BUFFERS};
 use russh::{
     client::{self, DisconnectReason, Msg, Session},
     Channel, ChannelId, ChannelOpenFailure, Pty, Sig,
@@ -177,14 +177,10 @@ where
 
     #[allow(unused_variables)]
     async fn data(&mut self, channel: ChannelId, data: &[u8], session: &mut Session) -> Result<(), Self::Error> {
-        if let Some(buf) = STDOUT_BUFFERS
-            .write()
-            .expect("Stdout rwlock was poisoned!")
-            .get_mut(&InternalId {
-                channel_id: channel,
-                instance_id: self.instance_id,
-            })
-        {
+        if let Some(mut buf) = STDOUT_BUFFERS.get_mut(&InternalId {
+            channel_id: channel,
+            instance_id: self.instance_id,
+        }) {
             buf.extend(data);
         }
 
@@ -198,36 +194,27 @@ where
         data: &[u8],
         session: &mut Session,
     ) -> Result<(), Self::Error> {
-        let internal_id = InternalId {
-            channel_id: channel,
-            instance_id: self.instance_id,
-        };
-
         if ext == 1 {
             // ext 1 is stderr according to SSH spec
-            if let Some(buf) = STDERR_BUFFERS
-                .write()
-                .expect("Stderr rwlock was poisoned!")
-                .get_mut(&internal_id)
-            {
+            if let Some(mut buf) = STDERR_BUFFERS.get_mut(&InternalId {
+                channel_id: channel,
+                instance_id: self.instance_id,
+            }) {
                 buf.extend(data);
             }
         } else {
-            let mut write_ref = STDEXT_BUFFERS.write().expect("Stdext rwlock was poisoned!");
-            match write_ref
-                .iter_mut()
-                .filter(|entry| entry.channel_id == channel && entry.ext == ext)
-                .next()
-            {
-                Some(existing_entry) => {
-                    existing_entry.buffer.extend(data);
+            let stdext_key = StdextKey {
+                channel_id: channel,
+                instance_id: self.instance_id,
+                ext,
+            };
+            match STDEXT_BUFFERS.get_mut(&stdext_key) {
+                Some(mut existing_entry) => {
+                    existing_entry.value_mut().extend(data);
                 }
-                None => write_ref.push(StdextEntry {
-                    channel_id: channel,
-                    instance_id: self.instance_id,
-                    ext,
-                    buffer: data.into(),
-                }),
+                None => {
+                    STDEXT_BUFFERS.insert(stdext_key, data.into());
+                }
             };
         }
 
