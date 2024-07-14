@@ -55,6 +55,3 @@ openssh = [
     "dep:bytes",
     "dep:shell-escape",
 ]
-
-[profile.test]
-strip = "debuginfo"
