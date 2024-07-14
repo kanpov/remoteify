@@ -165,6 +165,29 @@ async fn interactive_command_with_multiple_stdin_writes() {
     .await;
 }
 
+#[tokio::test]
+async fn interactive_command_with_env_vars_and_working_dir() {
+    executor_test(|executor| {
+        async move {
+            let mut config = LinuxProcessConfiguration::new("/usr/bin/bash");
+            config
+                .redirect_stdout()
+                .redirect_stdin()
+                .redirect_stderr()
+                .working_dir("/tmp")
+                .env("ENV", "VAL");
+            let mut process = executor.begin_execute(&config).await.unwrap();
+            process.write_to_stdin(b"pwd\n").await.unwrap();
+            process.write_to_stdin(b"echo $ENV").await.unwrap();
+            process.close_stdin().await.unwrap();
+            let process_output = process.await_exit_with_output().await.unwrap();
+            assert_ok_execution(process_output, "/tmp\nVAL\n");
+        }
+        .boxed()
+    })
+    .await;
+}
+
 fn assert_ok_execution(process_output: FinishedLinuxProcessOutput, expectation: &str) {
     assert_eq!(process_output.status_code, Some(0));
     assert!(process_output.stderr.is_empty());

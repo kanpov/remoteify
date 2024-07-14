@@ -76,7 +76,7 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
         })
     }
 
-    async fn begin_kill(&mut self) -> Result<(), LinuxProcessError> {
+    async fn send_kill_request(&mut self) -> Result<(), LinuxProcessError> {
         self.child.start_kill().map_err(LinuxProcessError::IO)
     }
 

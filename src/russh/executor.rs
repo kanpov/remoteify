@@ -84,7 +84,7 @@ impl LinuxProcess for RusshLinuxProcess {
         Ok(FinishedLinuxProcessOutput::join(output, status_code))
     }
 
-    async fn begin_kill(&mut self) -> Result<(), LinuxProcessError> {
+    async fn send_kill_request(&mut self) -> Result<(), LinuxProcessError> {
         let channel = self.channel_mutex.lock().await;
         channel
             .signal(Sig::INT)

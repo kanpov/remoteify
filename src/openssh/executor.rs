@@ -78,10 +78,6 @@ impl LinuxProcess for OpensshLinuxProcess {
         let output = get_current_output_internal(self.synthetic_id);
         Ok(FinishedLinuxProcessOutput::join(output, status_code))
     }
-
-    async fn begin_kill(&mut self) -> Result<(), LinuxProcessError> {
-        self.write_to_stdin(b"^C").await.map(|_| ())
-    }
 }
 
 #[async_trait]
