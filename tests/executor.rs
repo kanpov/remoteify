@@ -1,5 +1,6 @@
 use common::{OpensshData, RusshData};
 use futures::{future::BoxFuture, FutureExt};
+use nix::sys::signal::Signal;
 use remoteify::{
     executor::{FinishedLinuxProcessOutput, LinuxExecutor, LinuxProcessConfiguration},
     native::NativeLinux,
@@ -183,6 +184,23 @@ async fn interactive_command_with_env_vars_and_working_dir() {
             process.close_stdin().await.unwrap();
             let process_output = process.await_exit_with_output().await.unwrap();
             assert_ok_execution(process_output, "/tmp\nVAL\n");
+        }
+        .boxed()
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn interactive_command_receiving_sigterm() {
+    executor_test(|executor| {
+        async move {
+            let config = LinuxProcessConfiguration::new("/usr/bin/bash");
+            let process = executor.begin_execute(&config).await.unwrap();
+            executor
+                .send_signal(Signal::SIGTERM, process.id().unwrap())
+                .await
+                .unwrap();
+            process.await_exit().await.unwrap();
         }
         .boxed()
     })

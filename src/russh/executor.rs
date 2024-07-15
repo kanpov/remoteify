@@ -3,10 +3,11 @@ use std::{ffi::OsString, pin::Pin, sync::Arc};
 use async_trait::async_trait;
 use bytes::BytesMut;
 use dashmap::DashMap;
+use nix::sys::signal::Signal;
 use once_cell::sync::Lazy;
 use russh::{
     client::{self, Msg},
-    Channel, ChannelId, ChannelMsg, Sig,
+    Channel, ChannelId, ChannelMsg,
 };
 use tokio::{
     io::{AsyncReadExt, AsyncWrite, AsyncWriteExt},
@@ -88,15 +89,6 @@ impl LinuxProcess for RusshLinuxProcess {
         let output = self.get_current_output()?;
         Ok(FinishedLinuxProcessOutput::join(output, status_code))
     }
-
-    async fn send_kill_request(&mut self) -> Result<(), LinuxProcessError> {
-        let channel = self.channel_mutex.lock().await;
-        channel
-            .signal(Sig::INT)
-            .await
-            .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
-        Ok(())
-    }
 }
 
 impl Drop for RusshLinuxProcess {
@@ -131,6 +123,18 @@ where
             instance_id: self.id,
         });
         Ok(FinishedLinuxProcessOutput::join(output, status_code))
+    }
+
+    async fn send_signal(&self, signal: Signal, process_id: u32) -> Result<(), LinuxProcessError> {
+        let mut process_configuration = LinuxProcessConfiguration::new("kill");
+        process_configuration
+            .arg(format!("-{}", signal.as_str()))
+            .arg(process_id.to_string());
+        let process_output = self.execute(&process_configuration).await?;
+        match process_output.status_code {
+            Some(0) => Ok(()),
+            status_code => Err(LinuxProcessError::KillUtilityFailed { status_code }),
+        }
     }
 }
 
@@ -179,7 +183,6 @@ async fn begin_execute_internal<H: client::Handler>(
             if reader.read_to_string(&mut content).await.is_ok() {
                 pid_option = content.trim_end().parse().ok();
                 if pid_option.is_some() {
-                    dbg!(&pid_option);
                     break;
                 }
             }

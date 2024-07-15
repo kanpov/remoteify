@@ -7,6 +7,10 @@ use std::{
 use async_trait::async_trait;
 use bytes::BytesMut;
 use dashmap::DashMap;
+use nix::{
+    sys::signal::{kill, Signal},
+    unistd::Pid,
+};
 use once_cell::sync::Lazy;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader, Lines},
@@ -74,10 +78,6 @@ impl<'a> LinuxProcess for NativeLinuxProcess {
             stderr,
             stdout_extended: HashMap::new(),
         })
-    }
-
-    async fn send_kill_request(&mut self) -> Result<(), LinuxProcessError> {
-        self.child.start_kill().map_err(LinuxProcessError::IO)
     }
 
     async fn await_exit(mut self: Box<Self>) -> Result<Option<i64>, LinuxProcessError> {
@@ -159,6 +159,10 @@ impl LinuxExecutor for NativeLinux {
         let mut command = create_command_from_config(process_configuration);
         let os_output = command.output().await.map_err(LinuxProcessError::IO)?;
         Ok(conv_finished_output(os_output))
+    }
+
+    async fn send_signal(&self, signal: Signal, process_id: u32) -> Result<(), LinuxProcessError> {
+        kill(Pid::from_raw(process_id as i32), signal).map_err(LinuxProcessError::LowLevel)
     }
 }
 

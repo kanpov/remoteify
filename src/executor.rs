@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use nix::{errno::Errno, sys::signal::Signal};
 use regex::Regex;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,7 +25,7 @@ pub enum LinuxProcessExpectation {
         case_sensitive: bool,
     },
     Regex(Regex),
-    StreamClosure(StreamType),
+    StreamClosure(LinuxStreamType),
 }
 
 pub enum StringMatchType {
@@ -34,9 +35,46 @@ pub enum StringMatchType {
     EndsWith,
 }
 
-pub enum StreamType {
+pub enum LinuxStreamType {
     Stdout,
     Stderr,
+}
+
+#[derive(Debug)]
+pub enum LinuxProcessError {
+    KillRequestUnsupported,
+    ProcessIdNotFound,
+    StdinNotPiped,
+    KillUtilityFailed { status_code: Option<i64> },
+    IO(std::io::Error),
+    LowLevel(Errno),
+    Other(Box<dyn std::error::Error>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FinishedLinuxProcessOutput {
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+    pub stdout_extended: HashMap<u32, Vec<u8>>,
+    pub status_code: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinuxProcessOutput {
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+    pub stdout_extended: HashMap<u32, Vec<u8>>,
+}
+
+impl FinishedLinuxProcessOutput {
+    pub fn join(output: LinuxProcessOutput, status_code: Option<i64>) -> FinishedLinuxProcessOutput {
+        FinishedLinuxProcessOutput {
+            stdout: output.stdout,
+            stderr: output.stderr,
+            stdout_extended: output.stdout_extended,
+            status_code,
+        }
+    }
 }
 
 impl LinuxProcessConfiguration {
@@ -120,41 +158,6 @@ impl LinuxProcessConfiguration {
     }
 }
 
-#[derive(Debug)]
-pub enum LinuxProcessError {
-    KillRequestUnsupported,
-    ProcessIdNotFound,
-    StdinNotPiped,
-    IO(std::io::Error),
-    Other(Box<dyn std::error::Error>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FinishedLinuxProcessOutput {
-    pub stdout: Vec<u8>,
-    pub stderr: Vec<u8>,
-    pub stdout_extended: HashMap<u32, Vec<u8>>,
-    pub status_code: Option<i64>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LinuxProcessOutput {
-    pub stdout: Vec<u8>,
-    pub stderr: Vec<u8>,
-    pub stdout_extended: HashMap<u32, Vec<u8>>,
-}
-
-impl FinishedLinuxProcessOutput {
-    pub fn join(output: LinuxProcessOutput, status_code: Option<i64>) -> FinishedLinuxProcessOutput {
-        FinishedLinuxProcessOutput {
-            stdout: output.stdout,
-            stderr: output.stderr,
-            stdout_extended: output.stdout_extended,
-            status_code,
-        }
-    }
-}
-
 #[async_trait]
 pub trait LinuxProcess: Send {
     fn id(&self) -> Option<u32>;
@@ -168,10 +171,6 @@ pub trait LinuxProcess: Send {
     async fn await_exit(mut self: Box<Self>) -> Result<Option<i64>, LinuxProcessError>;
 
     async fn await_exit_with_output(mut self: Box<Self>) -> Result<FinishedLinuxProcessOutput, LinuxProcessError>;
-
-    async fn send_kill_request(&mut self) -> Result<(), LinuxProcessError> {
-        Err(LinuxProcessError::KillRequestUnsupported)
-    }
 }
 
 #[async_trait]
@@ -185,4 +184,6 @@ pub trait LinuxExecutor {
         &self,
         process_configuration: &LinuxProcessConfiguration,
     ) -> Result<FinishedLinuxProcessOutput, LinuxProcessError>;
+
+    async fn send_signal(&self, signal: Signal, process_id: u32) -> Result<(), LinuxProcessError>;
 }

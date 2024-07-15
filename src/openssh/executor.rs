@@ -11,6 +11,7 @@ use std::{
 use async_trait::async_trait;
 use bytes::BytesMut;
 use dashmap::DashMap;
+use nix::sys::signal::Signal;
 use once_cell::sync::Lazy;
 use openssh::{Child, ChildStdin, OwningCommand, Session, Stdio};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
@@ -18,7 +19,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use crate::{
     executor::{
         FinishedLinuxProcessOutput, LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError,
-        LinuxProcessOutput, StreamType,
+        LinuxProcessOutput, LinuxStreamType,
     },
     filesystem::{LinuxFilesystem, LinuxOpenOptions},
     ssh_util,
@@ -101,11 +102,11 @@ impl LinuxExecutor for OpensshLinux {
         let stdin = child.stdin().take();
 
         if process_configuration.redirect_stdout {
-            spawn_capture_task(synthetic_id, StreamType::Stdout, &mut child);
+            spawn_capture_task(synthetic_id, LinuxStreamType::Stdout, &mut child);
         }
 
         if process_configuration.redirect_stderr {
-            spawn_capture_task(synthetic_id, StreamType::Stderr, &mut child);
+            spawn_capture_task(synthetic_id, LinuxStreamType::Stderr, &mut child);
         }
 
         #[allow(unused)]
@@ -142,6 +143,19 @@ impl LinuxExecutor for OpensshLinux {
             .await
             .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
         Ok(conv_finished_output(output))
+    }
+
+    async fn send_signal(&self, signal: Signal, process_id: u32) -> Result<(), LinuxProcessError> {
+        let mut owning_command = self.session.clone().arc_shell("kill");
+        owning_command
+            .arg(format!("-{}", signal.as_str()))
+            .arg(process_id.to_string());
+        owning_command
+            .status()
+            .await
+            // we cannot distinguish according to the status code of "kill" since openssh crate can't reliably report exit codes of commands
+            .map(|_| ())
+            .map_err(|err| LinuxProcessError::Other(Box::new(err)))
     }
 }
 
@@ -216,16 +230,16 @@ fn create_owning_command(
     (owning_command, pid_file)
 }
 
-fn spawn_capture_task(synthetic_id: u32, capturer_type: StreamType, child: &mut Child<Arc<Session>>) {
+fn spawn_capture_task(synthetic_id: u32, capturer_type: LinuxStreamType, child: &mut Child<Arc<Session>>) {
     let mut stdout_reader = None;
     let mut stderr_reader = None;
 
     match capturer_type {
-        StreamType::Stdout => {
+        LinuxStreamType::Stdout => {
             STDOUT_BUFFERS.insert(synthetic_id, BytesMut::new());
             stdout_reader = Some(BufReader::new(child.stdout().take().unwrap()).lines());
         }
-        StreamType::Stderr => {
+        LinuxStreamType::Stderr => {
             STDERR_BUFFERS.insert(synthetic_id, BytesMut::new());
             stderr_reader = Some(BufReader::new(child.stderr().take().unwrap()).lines());
         }
@@ -234,8 +248,8 @@ fn spawn_capture_task(synthetic_id: u32, capturer_type: StreamType, child: &mut 
     tokio::spawn(async move {
         loop {
             let line = match match capturer_type {
-                StreamType::Stdout => stdout_reader.as_mut().unwrap().next_line().await,
-                StreamType::Stderr => stderr_reader.as_mut().unwrap().next_line().await,
+                LinuxStreamType::Stdout => stdout_reader.as_mut().unwrap().next_line().await,
+                LinuxStreamType::Stderr => stderr_reader.as_mut().unwrap().next_line().await,
             } {
                 Ok(Some(line)) => line + "\n",
                 Ok(None) => break,
@@ -243,8 +257,8 @@ fn spawn_capture_task(synthetic_id: u32, capturer_type: StreamType, child: &mut 
             };
 
             let write_ref = match capturer_type {
-                StreamType::Stdout => STDOUT_BUFFERS.as_ref(),
-                StreamType::Stderr => STDERR_BUFFERS.as_ref(),
+                LinuxStreamType::Stdout => STDOUT_BUFFERS.as_ref(),
+                LinuxStreamType::Stderr => STDERR_BUFFERS.as_ref(),
             };
             match write_ref.get_mut(&synthetic_id) {
                 Some(mut buf) => buf.extend(line.as_bytes()),
