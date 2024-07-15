@@ -10,3 +10,6 @@ pub mod russh;
 
 #[cfg(feature = "openssh")]
 pub mod openssh;
+
+#[cfg(feature = "ssh_util")]
+pub(crate) mod ssh_util;

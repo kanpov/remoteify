@@ -1,4 +1,4 @@
-use std::{pin::Pin, sync::Arc};
+use std::{ffi::OsString, pin::Pin, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::BytesMut;
@@ -9,13 +9,17 @@ use russh::{
     Channel, ChannelId, ChannelMsg, Sig,
 };
 use tokio::{
-    io::{AsyncWrite, AsyncWriteExt},
+    io::{AsyncReadExt, AsyncWrite, AsyncWriteExt},
     sync::Mutex,
 };
 
-use crate::executor::{
-    FinishedLinuxProcessOutput, LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError,
-    LinuxProcessOutput,
+use crate::{
+    executor::{
+        FinishedLinuxProcessOutput, LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError,
+        LinuxProcessOutput,
+    },
+    filesystem::{LinuxFilesystem, LinuxOpenOptions},
+    ssh_util,
 };
 
 use super::RusshLinux;
@@ -41,12 +45,13 @@ struct RusshLinuxProcess {
     pub(super) internal_id: InternalId,
     pub(super) channel_mutex: Arc<Mutex<Channel<Msg>>>,
     pub(super) stdin: Option<Pin<Box<dyn AsyncWrite + Send>>>,
+    pub(super) pid_option: Option<u32>,
 }
 
 #[async_trait]
 impl LinuxProcess for RusshLinuxProcess {
     fn id(&self) -> Option<u32> {
-        None
+        self.pid_option
     }
 
     async fn write_to_stdin(&mut self, data: &[u8]) -> Result<usize, LinuxProcessError> {
@@ -138,7 +143,7 @@ async fn begin_execute_internal<H: client::Handler>(
         .channel_open_session()
         .await
         .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
-    apply_process_configuration(&mut channel, process_configuration)
+    let pid_file = apply_process_configuration(&mut channel, process_configuration)
         .await
         .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
 
@@ -159,6 +164,26 @@ async fn begin_execute_internal<H: client::Handler>(
             },
             BytesMut::new(),
         );
+    }
+
+    #[allow(unused)]
+    let mut pid_option: Option<u32> = None;
+    let pid_file_os_str = OsString::from(pid_file);
+    let pid_file_os_str = pid_file_os_str.as_os_str();
+    loop {
+        if let Ok(mut reader) = instance
+            .open_file(pid_file_os_str, &LinuxOpenOptions::new().read())
+            .await
+        {
+            let mut content = String::new();
+            if reader.read_to_string(&mut content).await.is_ok() {
+                pid_option = content.trim_end().parse().ok();
+                if pid_option.is_some() {
+                    dbg!(&pid_option);
+                    break;
+                }
+            }
+        }
     }
 
     if process_configuration.redirect_stdin {
@@ -189,6 +214,7 @@ async fn begin_execute_internal<H: client::Handler>(
         },
         channel_mutex: Arc::new(Mutex::new(channel)),
         stdin: stdin_option,
+        pid_option,
     })
 }
 
@@ -238,7 +264,7 @@ async fn apply_process_configuration(
     channel: &mut Channel<Msg>,
     process_configuration: &LinuxProcessConfiguration,
 ) -> Result<String, russh::Error> {
-    let (command, pid_file) = process_configuration.desugar_to_shell_command();
+    let (command, pid_file) = ssh_util::derive_shell_command(process_configuration);
     channel.exec(true, command).await?;
 
     Ok(pid_file)

@@ -10,12 +10,12 @@ tokio = { version = "1.38.0", features = ["fs", "io-util", "process"] }
 async-trait = "0.1.81"
 bitflags = "2.6.0"
 regex = "1.10.5"
-uuid = { version = "1.9.1", features = ["v4"] }
 # dependencies commonly used by impls but not included in api
 once_cell = { version = "1.19.0", optional = true }
 dashmap = { version = "6.0.1", optional = true }
 bytes = { version = "1.6.1", optional = true }
 shell-escape = { version = "0.1.5", optional = true }
+uuid = { version = "1.9.1", features = ["v4"], optional = true }
 # russh impl
 russh = { version = "0.43.0", optional = true }
 russh-keys = { version = "0.43.0", optional = true }
@@ -37,21 +37,17 @@ futures = "0.3.30"
 [features]
 default = []
 native = ["dep:once_cell", "dep:dashmap", "dep:bytes"]
-russh = [
-    "dep:russh",
-    "dep:russh-keys",
-    "dep:russh-sftp",
+ssh_util = [
     "dep:once_cell",
     "dep:dashmap",
     "dep:bytes",
     "dep:shell-escape",
+    "dep:uuid",
 ]
+russh = ["ssh_util", "dep:russh", "dep:russh-keys", "dep:russh-sftp"]
 openssh = [
+    "ssh_util",
     "dep:openssh",
     "dep:openssh-sftp-client",
     "dep:futures-util",
-    "dep:once_cell",
-    "dep:dashmap",
-    "dep:bytes",
-    "dep:shell-escape",
 ]

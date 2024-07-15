@@ -6,7 +6,6 @@ use std::{
         atomic::{AtomicU32, Ordering},
         Arc,
     },
-    time::Duration,
 };
 
 use async_trait::async_trait;
@@ -22,6 +21,7 @@ use crate::{
         LinuxProcessOutput, StreamType,
     },
     filesystem::{LinuxFilesystem, LinuxOpenOptions},
+    ssh_util,
 };
 
 use super::OpensshLinux;
@@ -108,6 +108,7 @@ impl LinuxExecutor for OpensshLinux {
             spawn_capture_task(synthetic_id, StreamType::Stderr, &mut child);
         }
 
+        #[allow(unused)]
         let mut pid_option: Option<u32> = None;
         let pid_file_os_str = OsString::from(pid_file);
         let pid_file_os_str = pid_file_os_str.as_os_str();
@@ -117,7 +118,6 @@ impl LinuxExecutor for OpensshLinux {
                 if reader.read_to_string(&mut content).await.is_ok() {
                     pid_option = content.trim_end().parse().ok();
                     if pid_option.is_some() {
-                        dbg!(&pid_option);
                         break;
                     }
                 }
@@ -210,7 +210,7 @@ fn create_owning_command(
         }
     };
 
-    let (command, pid_file) = process_configuration.desugar_to_shell_command();
+    let (command, pid_file) = ssh_util::derive_shell_command(process_configuration);
     let mut owning_command = instance.session.clone().arc_shell(command);
     apply_pipes(&mut owning_command);
     (owning_command, pid_file)
