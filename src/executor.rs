@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
+use regex::Regex;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinuxProcessConfiguration {
@@ -14,6 +15,28 @@ pub struct LinuxProcessConfiguration {
     pub(crate) user_id: Option<u32>,
     pub(crate) group_id: Option<u32>,
     pub(crate) process_group_id: Option<u32>,
+}
+
+pub enum LinuxProcessExpectation {
+    StringMatch {
+        value: String,
+        match_type: StringMatchType,
+        case_sensitive: bool,
+    },
+    Regex(Regex),
+    StreamClosure(StreamType),
+}
+
+pub enum StringMatchType {
+    Equals,
+    Contains,
+    StartsWith,
+    EndsWith,
+}
+
+pub enum StreamType {
+    Stdout,
+    Stderr,
 }
 
 impl LinuxProcessConfiguration {
@@ -102,8 +125,6 @@ pub enum LinuxProcessError {
     KillRequestUnsupported,
     ProcessIdNotFound,
     StdinNotPiped,
-    StdoutNotPiped,
-    StderrNotPiped,
     IO(std::io::Error),
     Other(Box<dyn std::error::Error>),
 }
