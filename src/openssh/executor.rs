@@ -1,10 +1,12 @@
 use std::{
     collections::HashMap,
+    ffi::OsString,
     process::Output,
     sync::{
         atomic::{AtomicU32, Ordering},
         Arc,
     },
+    time::Duration,
 };
 
 use async_trait::async_trait;
@@ -12,11 +14,14 @@ use bytes::BytesMut;
 use dashmap::DashMap;
 use once_cell::sync::Lazy;
 use openssh::{Child, ChildStdin, OwningCommand, Session, Stdio};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
-use crate::executor::{
-    FinishedLinuxProcessOutput, LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError,
-    LinuxProcessOutput, StreamType,
+use crate::{
+    executor::{
+        FinishedLinuxProcessOutput, LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError,
+        LinuxProcessOutput, StreamType,
+    },
+    filesystem::{LinuxFilesystem, LinuxOpenOptions},
 };
 
 use super::OpensshLinux;
@@ -29,12 +34,13 @@ struct OpensshLinuxProcess {
     child: Child<Arc<Session>>,
     stdin: Option<ChildStdin>,
     synthetic_id: u32,
+    pid_option: Option<u32>,
 }
 
 #[async_trait]
 impl LinuxProcess for OpensshLinuxProcess {
     fn id(&self) -> Option<u32> {
-        None
+        self.pid_option
     }
 
     async fn write_to_stdin(&mut self, data: &[u8]) -> Result<usize, LinuxProcessError> {
@@ -86,7 +92,7 @@ impl LinuxExecutor for OpensshLinux {
         &self,
         process_configuration: &LinuxProcessConfiguration,
     ) -> Result<Box<dyn LinuxProcess>, LinuxProcessError> {
-        let mut owning_command = create_owning_command(&self, &process_configuration);
+        let (mut owning_command, pid_file) = create_owning_command(&self, &process_configuration);
         let mut child = owning_command
             .spawn()
             .await
@@ -102,10 +108,27 @@ impl LinuxExecutor for OpensshLinux {
             spawn_capture_task(synthetic_id, StreamType::Stderr, &mut child);
         }
 
+        let mut pid_option: Option<u32> = None;
+        let pid_file_os_str = OsString::from(pid_file);
+        let pid_file_os_str = pid_file_os_str.as_os_str();
+        loop {
+            if let Ok(mut reader) = self.open_file(pid_file_os_str, &LinuxOpenOptions::new().read()).await {
+                let mut content = String::new();
+                if reader.read_to_string(&mut content).await.is_ok() {
+                    pid_option = content.trim_end().parse().ok();
+                    if pid_option.is_some() {
+                        dbg!(&pid_option);
+                        break;
+                    }
+                }
+            }
+        }
+
         Ok(Box::new(OpensshLinuxProcess {
             child,
             synthetic_id,
             stdin,
+            pid_option,
         }))
     }
 
@@ -113,7 +136,7 @@ impl LinuxExecutor for OpensshLinux {
         &self,
         process_configuration: &LinuxProcessConfiguration,
     ) -> Result<FinishedLinuxProcessOutput, LinuxProcessError> {
-        let mut owning_command = create_owning_command(&self, &process_configuration);
+        let (mut owning_command, _) = create_owning_command(&self, &process_configuration);
         let output = owning_command
             .output()
             .await
@@ -166,7 +189,7 @@ fn get_current_output_internal(synthetic_id: u32) -> LinuxProcessOutput {
 fn create_owning_command(
     instance: &OpensshLinux,
     process_configuration: &LinuxProcessConfiguration,
-) -> OwningCommand<Arc<Session>> {
+) -> (OwningCommand<Arc<Session>>, String) {
     let apply_pipes = |owning_command: &mut OwningCommand<Arc<Session>>| {
         if process_configuration.redirect_stdout {
             owning_command.stdout(Stdio::piped());
@@ -187,42 +210,10 @@ fn create_owning_command(
         }
     };
 
-    // when a working dir needs or an env var need to be set, a shell command must be used, otherwise we use a regular command
-    // the session arc needs to be cloned since the command will take ownership of the session
-
-    if process_configuration.working_dir.is_none() && process_configuration.envs.is_empty() {
-        let mut owning_command = instance.session.clone().arc_command(&process_configuration.program);
-        owning_command.args(&process_configuration.args);
-        apply_pipes(&mut owning_command);
-        owning_command
-    } else {
-        let mut env_str = String::new();
-
-        for (env_key, env_value) in &process_configuration.envs {
-            env_str.push_str(format!("{}={}", env_key, env_value).as_str());
-            env_str.push_str(" ");
-        }
-
-        let mut command = process_configuration.program.clone();
-        if process_configuration.args.len() > 0 {
-            command.push_str(" ");
-            for arg in &process_configuration.args {
-                command.push_str(shell_escape::unix::escape(arg.into()).as_ref());
-                command.push_str(" ");
-            }
-        }
-        if process_configuration.envs.len() > 0 {
-            command = env_str + command.as_str();
-        }
-
-        if let Some(working_dir) = &process_configuration.working_dir {
-            command = format!("(cd {} && {})", working_dir, command);
-        }
-
-        let mut owning_command = instance.session.clone().arc_shell(command);
-        apply_pipes(&mut owning_command);
-        owning_command
-    }
+    let (command, pid_file) = process_configuration.desugar_to_shell_command();
+    let mut owning_command = instance.session.clone().arc_shell(command);
+    apply_pipes(&mut owning_command);
+    (owning_command, pid_file)
 }
 
 fn spawn_capture_task(synthetic_id: u32, capturer_type: StreamType, child: &mut Child<Arc<Session>>) {

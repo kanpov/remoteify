@@ -237,29 +237,9 @@ fn fetch_process_output(internal_id: &InternalId) -> LinuxProcessOutput {
 async fn apply_process_configuration(
     channel: &mut Channel<Msg>,
     process_configuration: &LinuxProcessConfiguration,
-) -> Result<(), russh::Error> {
-    let mut env_string = String::new();
-    for (key, value) in &process_configuration.envs {
-        env_string.push_str(format!("{}={} ", key, value).as_str());
-    }
-
-    let mut command = process_configuration.program.clone();
-    if process_configuration.args.len() > 0 {
-        command.push_str(" ");
-        for arg in &process_configuration.args {
-            command.push_str(shell_escape::unix::escape(arg.into()).as_ref());
-            command.push_str(" ");
-        }
-    }
-    if env_string.len() > 0 {
-        command = env_string + command.as_str();
-    }
-
-    if let Some(working_dir) = &process_configuration.working_dir {
-        command = format!("(cd {} && {})", working_dir, command);
-    }
-
+) -> Result<String, russh::Error> {
+    let (command, pid_file) = process_configuration.desugar_to_shell_command();
     channel.exec(true, command).await?;
 
-    Ok(())
+    Ok(pid_file)
 }

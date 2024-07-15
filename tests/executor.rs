@@ -7,6 +7,7 @@ use remoteify::{
 use uuid::Uuid;
 
 mod common;
+
 #[tokio::test]
 async fn simple_command_outputting() {
     executor_test(|executor| {
