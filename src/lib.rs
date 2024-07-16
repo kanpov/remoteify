@@ -9,12 +9,12 @@ pub mod network;
 
 // Out of the box implementations
 
-#[cfg(feature = "helpers_ssh")]
+#[cfg(feature = "impl-ssh-common")]
 #[cfg(feature = "executor")]
-pub(crate) mod helpers_ssh;
-#[cfg(feature = "impl_native")]
+pub(crate) mod derive_ext;
+#[cfg(feature = "impl-native")]
 pub mod impl_native;
-#[cfg(feature = "impl_openssh")]
+#[cfg(feature = "impl-openssh")]
 pub mod impl_openssh;
-#[cfg(feature = "impl_russh")]
+#[cfg(feature = "impl-russh")]
 pub mod impl_russh;

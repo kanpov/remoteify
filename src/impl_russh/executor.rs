@@ -15,12 +15,12 @@ use tokio::{
 };
 
 use crate::{
+    derive_ext::DeriveExt,
     executor::{
         FinishedLinuxProcessOutput, LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError,
         LinuxProcessOutput,
     },
     filesystem::{LinuxFilesystem, LinuxOpenOptions},
-    helpers_ssh,
 };
 
 use super::RusshLinux;
@@ -269,7 +269,7 @@ async fn apply_process_configuration(
     channel: &mut Channel<Msg>,
     process_configuration: &LinuxProcessConfiguration,
 ) -> Result<String, russh::Error> {
-    let (command, pid_file) = helpers_ssh::derive_shell_command(process_configuration);
+    let (command, pid_file) = process_configuration.derive_shell_command();
     channel.exec(true, command).await?;
 
     Ok(pid_file)

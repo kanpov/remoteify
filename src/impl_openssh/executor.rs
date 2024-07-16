@@ -17,12 +17,12 @@ use openssh::{Child, ChildStdin, OwningCommand, Session, Stdio};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
 use crate::{
+    derive_ext::DeriveExt,
     executor::{
         FinishedLinuxProcessOutput, LinuxExecutor, LinuxProcess, LinuxProcessConfiguration, LinuxProcessError,
         LinuxProcessOutput, LinuxStreamType,
     },
     filesystem::{LinuxFilesystem, LinuxOpenOptions},
-    helpers_ssh,
 };
 
 use super::OpensshLinux;
@@ -224,7 +224,7 @@ fn create_owning_command(
         }
     };
 
-    let (command, pid_file) = helpers_ssh::derive_shell_command(process_configuration);
+    let (command, pid_file) = process_configuration.derive_shell_command();
     let mut owning_command = instance.session.clone().arc_shell(command);
     apply_pipes(&mut owning_command);
     (owning_command, pid_file)

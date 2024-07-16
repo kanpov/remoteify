@@ -36,9 +36,9 @@ remoteify = { path = ".", features = [
     "filesystem",
     "executor",
     "network",
-    "impl_native",
-    "impl_russh",
-    "impl_openssh",
+    "impl-native",
+    "impl-russh",
+    "impl-openssh",
 ] }
 futures = "0.3.30"
 
@@ -49,17 +49,22 @@ filesystem = ["dep:bitflags"]
 network = []
 executor = ["filesystem", "dep:regex", "dep:nix"]
 # implementations
-impl_native = ["dep:once_cell", "dep:dashmap", "dep:bytes"]
-helpers_ssh = [
+impl-native = ["dep:once_cell", "dep:dashmap", "dep:bytes"]
+impl-ssh-common = [
     "dep:once_cell",
     "dep:dashmap",
     "dep:bytes",
     "dep:shell-escape",
     "dep:uuid",
 ]
-impl_russh = ["helpers_ssh", "dep:russh", "dep:russh-keys", "dep:russh-sftp"]
-impl_openssh = [
-    "helpers_ssh",
+impl-russh = [
+    "impl-ssh-common",
+    "dep:russh",
+    "dep:russh-keys",
+    "dep:russh-sftp",
+]
+impl-openssh = [
+    "impl-ssh-common",
     "dep:openssh",
     "dep:openssh-sftp-client",
     "dep:futures-util",
