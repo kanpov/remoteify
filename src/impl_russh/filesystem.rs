@@ -1,6 +1,6 @@
 use std::{
     ffi::{OsStr, OsString},
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use async_trait::async_trait;
@@ -150,35 +150,31 @@ where
 
         let path_buf = PathBuf::from(path);
         for component in path_buf.components() {
-            match component {
-                std::path::Component::Normal(os_component_value) => {
-                    let component_value = match os_component_value.to_str() {
-                        Some(val) => val,
-                        None => return Err(io::Error::other("could not convert os_str to str")),
-                    };
+            if let Component::Normal(os_component_value) = component {
+                let component_value = os_component_value
+                    .to_str()
+                    .ok_or_else(|| io::Error::other("could not convert os_str to str"))?;
 
-                    current_path.push_str("/");
-                    current_path.push_str(component_value);
+                current_path.push('/');
+                current_path.push_str(component_value);
 
-                    if !previous_existed {
-                        let exists = match self.sftp_session.try_exists(&current_path).await {
-                            Ok(exists) => exists,
-                            Err(err) => return Err(io::Error::other(err)),
-                        };
-
-                        if exists {
-                            previous_existed = true;
-                        }
-
-                        continue;
-                    }
-
-                    match self.sftp_session.create_dir(&current_path).await {
-                        Ok(_) => {}
+                if !previous_existed {
+                    let exists = match self.sftp_session.try_exists(&current_path).await {
+                        Ok(exists) => exists,
                         Err(err) => return Err(io::Error::other(err)),
                     };
+
+                    if exists {
+                        previous_existed = true;
+                    }
+
+                    continue;
                 }
-                _ => {}
+
+                match self.sftp_session.create_dir(&current_path).await {
+                    Ok(_) => {}
+                    Err(err) => return Err(io::Error::other(err)),
+                };
             }
         }
 

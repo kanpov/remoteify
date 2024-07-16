@@ -19,7 +19,7 @@ where
         _local_socket: LinuxNetworkSocket,
         _remote_socket: LinuxNetworkSocket,
     ) -> Result<(), LinuxNetworkError> {
-        Err(LinuxNetworkError::UnsupportedOperation)
+        Err(LinuxNetworkError::ForwardingNotSupported)
     }
 
     async fn direct_forward(
@@ -27,6 +27,6 @@ where
         _local_socket: LinuxNetworkSocket,
         _remote_socket: LinuxNetworkSocket,
     ) -> Result<(), LinuxNetworkError> {
-        Err(LinuxNetworkError::UnsupportedOperation)
+        Err(LinuxNetworkError::ForwardingNotSupported)
     }
 }

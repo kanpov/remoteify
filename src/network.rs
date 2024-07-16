@@ -4,7 +4,7 @@ use async_trait::async_trait;
 
 #[derive(Debug)]
 pub enum LinuxNetworkError {
-    UnsupportedOperation,
+    ForwardingNotSupported,
     Other(Box<dyn std::error::Error>),
 }
 
