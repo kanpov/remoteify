@@ -41,6 +41,19 @@ pub struct RusshPtyOptions {
     pub terminal_modes: Vec<(Pty, u32)>,
 }
 
+impl Default for RusshPtyOptions {
+    fn default() -> Self {
+        Self {
+            terminal: "xterm".into(),
+            col_width: 1000,
+            row_height: 1000,
+            pix_width: 0,
+            pix_height: 0,
+            terminal_modes: Vec::new(),
+        }
+    }
+}
+
 pub(super) struct WrappingHandler<H>
 where
     H: client::Handler,
