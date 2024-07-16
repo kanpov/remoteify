@@ -1,15 +1,20 @@
+// Modules
+
+#[cfg(feature = "executor")]
 pub mod executor;
+#[cfg(feature = "filesystem")]
 pub mod filesystem;
+#[cfg(feature = "network")]
 pub mod network;
 
-#[cfg(feature = "native")]
-pub mod native;
+// Out of the box implementations
 
-#[cfg(feature = "russh")]
-pub mod russh;
-
-#[cfg(feature = "openssh")]
-pub mod openssh;
-
-#[cfg(feature = "ssh_util")]
-pub(crate) mod ssh_util;
+#[cfg(feature = "helpers_ssh")]
+#[cfg(feature = "executor")]
+pub(crate) mod helpers_ssh;
+#[cfg(feature = "impl_native")]
+pub mod impl_native;
+#[cfg(feature = "impl_openssh")]
+pub mod impl_openssh;
+#[cfg(feature = "impl_russh")]
+pub mod impl_russh;

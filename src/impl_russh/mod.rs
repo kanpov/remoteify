@@ -1,12 +1,17 @@
 pub mod connection;
+#[cfg(feature = "executor")]
 mod executor;
+#[cfg(feature = "filesystem")]
 mod filesystem;
+#[cfg(feature = "network")]
 mod network;
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
+#[cfg(feature = "executor")]
 use executor::{InternalId, StdextKey, STDERR_BUFFERS, STDEXT_BUFFERS, STDOUT_BUFFERS};
+
 use russh::{
     client::{self, DisconnectReason, Msg, Session},
     Channel, ChannelId, ChannelOpenFailure, Pty, Sig,
@@ -14,6 +19,7 @@ use russh::{
 use russh_keys::key::PublicKey;
 use tokio::sync::Mutex;
 
+#[allow(unused)]
 pub struct RusshLinux<H>
 where
     H: client::Handler,
@@ -40,6 +46,7 @@ where
     H: client::Handler,
 {
     pub inner: H,
+    #[allow(unused)]
     pub instance_id: u16,
 }
 
@@ -177,6 +184,7 @@ where
 
     #[allow(unused_variables)]
     async fn data(&mut self, channel: ChannelId, data: &[u8], session: &mut Session) -> Result<(), Self::Error> {
+        #[cfg(feature = "executor")]
         if let Some(mut buf) = STDOUT_BUFFERS.get_mut(&InternalId {
             channel_id: channel,
             instance_id: self.instance_id,
@@ -194,6 +202,7 @@ where
         data: &[u8],
         session: &mut Session,
     ) -> Result<(), Self::Error> {
+        #[cfg(feature = "executor")]
         if ext == 1 {
             // ext 1 is stderr according to SSH spec
             if let Some(mut buf) = STDERR_BUFFERS.get_mut(&InternalId {

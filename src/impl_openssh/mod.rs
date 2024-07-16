@@ -1,5 +1,8 @@
+#[cfg(feature = "executor")]
 mod executor;
+#[cfg(feature = "filesystem")]
 mod filesystem;
+#[cfg(feature = "network")]
 mod network;
 
 use std::sync::Arc;
@@ -8,6 +11,7 @@ use openssh::Session;
 use openssh_sftp_client::{Sftp, SftpOptions};
 use tokio::sync::Mutex;
 
+#[allow(unused)]
 pub struct OpensshLinux {
     session: Arc<Session>,
     sftp_mutex: Arc<Mutex<Sftp>>,

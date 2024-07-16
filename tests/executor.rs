@@ -3,7 +3,7 @@ use futures::{future::BoxFuture, FutureExt};
 use nix::sys::signal::Signal;
 use remoteify::{
     executor::{FinishedLinuxProcessOutput, LinuxExecutor, LinuxProcessConfiguration},
-    native::NativeLinux,
+    impl_native::NativeLinux,
 };
 use uuid::Uuid;
 

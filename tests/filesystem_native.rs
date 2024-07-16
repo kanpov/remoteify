@@ -7,7 +7,7 @@ use std::{
 use common::{entries_contain, gen_nested_tmp_path, gen_tmp_path};
 use remoteify::{
     filesystem::{LinuxFileMetadata, LinuxFileType, LinuxFilesystem, LinuxOpenOptions, LinuxPermissions},
-    native::NativeLinux,
+    impl_native::NativeLinux,
 };
 use tokio::{
     fs::{

@@ -20,7 +20,7 @@ use crate::{
         LinuxProcessOutput,
     },
     filesystem::{LinuxFilesystem, LinuxOpenOptions},
-    ssh_util,
+    helpers_ssh,
 };
 
 use super::RusshLinux;
@@ -269,7 +269,7 @@ async fn apply_process_configuration(
     channel: &mut Channel<Msg>,
     process_configuration: &LinuxProcessConfiguration,
 ) -> Result<String, russh::Error> {
-    let (command, pid_file) = ssh_util::derive_shell_command(process_configuration);
+    let (command, pid_file) = helpers_ssh::derive_shell_command(process_configuration);
     channel.exec(true, command).await?;
 
     Ok(pid_file)
