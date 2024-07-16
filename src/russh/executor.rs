@@ -147,6 +147,8 @@ async fn begin_execute_internal<H: client::Handler>(
         .channel_open_session()
         .await
         .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
+    drop(handle); // do not hold handle for longer than necessary
+
     let pid_file = apply_process_configuration(&mut channel, process_configuration)
         .await
         .map_err(|err| LinuxProcessError::Other(Box::new(err)))?;
